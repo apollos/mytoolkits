@@ -1,9 +1,0 @@
-#!/bin/sh
-
-ssh -Nf -D localhost:9090 root@9.114.46.149
-
-if [ $? -eq 0 ]; then
-	echo "ssh tunnel is ok now"
-else
-	echo "ssh tunnel setup failed $?"
-fi
