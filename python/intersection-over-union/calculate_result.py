@@ -6,6 +6,8 @@ from os.path import join
 from os.path import exists
 from os.path import isdir
 from os import listdir
+from collections import namedtuple
+
 
 def genXmlFileList(file_path):
     #only search current folder
@@ -45,7 +47,7 @@ def genXmlDict(fileLst):
             cls = obj.find('name').text
             xmlbox = obj.find('bndbox')
             if ((not cls is None) && (not xmlbox is None)):
-                b = (float(xmlbox.find('xmin').text), float(xmlbox.find('xmax').text), float(xmlbox.find('ymin').text), float(xmlbox.find('ymax').text))
+                b = (float(xmlbox.find('xmin').text), float(xmlbox.find('ymin').text), float(xmlbox.find('xmax').text), float(xmlbox.find('ymax').text))
                 item = [cls, b]
                 items.append(item)
          
@@ -90,10 +92,31 @@ def bb_intersection_over_union(boxA, boxB):
 	
 
 def CaculateIOU( base_info, infiles_info )
-    iou = bb_intersection_over_union(detection.gt, detection.pred)
-    cv2.putText(image, "IoU: {:.4f}".format(iou), (10, 30),
-    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-    print("{}: {:.4f}".format(detection.image_path, iou))
+    IOU_thresh = 0.5
+    average_IOU = 0.0
+    total = 0
+    correct = 0
+    for filename in base_info:
+        total += len(base_info[filename][2])
+        if filename in infiles_info.keys():
+            # (["width", "high", ["class", "xmin", "ymin", "xmax", "ymax"]])
+            n = len(infiles_info[filename][2]) if len(infiles_info[filename][2] <= len(base_info[filename][2]) else len(base_info[filename][2])
+            best_iou = 0
+            count = 0            
+            for prediction in infiles_info[filename][2]:                
+                for groundtruth in base_info[filename][2]:
+                    iou = bb_intersection_over_union(base_info[filename][bboxIdx], infiles_info[filename][b)
+                    if (iou > best_iou)
+                        best_iou = iou
+                count += 1 #object count
+                average_IOU += best_iou # all IOU sum 
+                if (iou >= IOU_thresh):
+                    correct +=1 #good IOU count
+                if (count == n):                    
+                    break
+    average_IOU = average_IOU/total
+    return (correct, average_IOU)
+
 
 def main(infiles, basefiles, outfile):
     """main function"""
