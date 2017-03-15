@@ -29,9 +29,10 @@ def genXmlFileList(file_path):
                 xmlfilelist.append("%s/%s" % (file_path, filename))
     return xmlfilelist
 
-def genXmlDict(fileLst, file_path):
+def genXmlDict(fileLst, file_path, gt_flag=False):
         
     xmlDict = {}
+    gtDict = {}
     for xmlfile in fileLst:
         in_file = open(xmlfile)
         tree=ET.parse(in_file)
@@ -43,21 +44,33 @@ def genXmlDict(fileLst, file_path):
         if ((w is None) or (h is None)):
             continue
         items = []
-        for obj in root.iter('object'):
-            cls = obj.find('name').text
-            xmlbox = obj.find('bndbox')
-            if ((not cls is None) and (not xmlbox is None)):
-                b = (float(xmlbox.find('xmin').text), float(xmlbox.find('ymin').text), float(xmlbox.find('xmax').text), float(xmlbox.find('ymax').text))
-                item = [cls, b]
-                items.append(item)
+        for obj in root.iter('object'):  
+            try:   
+                cls = obj.find('name').text
+                if(not gt_flag):
+                    prb = obj.find('possibility').text
+                else:
+                    prb = 1
+                if cls in gtDict.keys():
+                    gtDict[cls] += 1
+                else:
+                    gtDict[cls] = 1
+                xmlbox = obj.find('bndbox')
+                if ((not cls is None) and (not xmlbox is None)):
+                    b = (float(xmlbox.find('xmin').text), float(xmlbox.find('ymin').text), float(xmlbox.find('xmax').text), float(xmlbox.find('ymax').text))
+                    item = [cls, prb, b]
+                    items.append(item)
+            except Exception:
+                print "Miss important key in file %s" % (xmlfile)
+                continue
 
         if(len( items ) > 0):  
             p = re.compile(file_path+"/*")    
             xmlfile = p.sub("", xmlfile)
             xmlDict[xmlfile]=[w, h, items]
-    return xmlDict
+    return (xmlDict, gtDict)
 
-def InforfromXml(file_path):
+def InforfromXml(file_path, gt_flag=False):
 
     if not exists(file_path):
         print("%s does not exists" % file_path)
@@ -67,7 +80,7 @@ def InforfromXml(file_path):
         return None
     xmlfilelist = genXmlFileList(file_path)
     
-    return genXmlDict(xmlfilelist, file_path)     
+    return genXmlDict(xmlfilelist, file_path, gt_flag)     
     
 def bb_intersection_over_union(boxA, boxB):
     # determine the (x, y)-coordinates of the intersection rectangle
@@ -102,21 +115,30 @@ def CaculateIOU( base_info, infiles_info ):
     average_IOU = 0.0
     total = 0
     correct = 0
+    predict_list = {}
 
     for filename in base_info:
         total += len(base_info[filename][2])
         if filename in infiles_info.keys():
-            # (["width", "high", ["class", ("xmin", "ymin", "xmax", "ymax")]])            
-            n = len(infiles_info[filename][2]) if len(infiles_info[filename][2]) <= len(base_info[filename][2]) else len(base_info[filename][2])            
+            # (["width", "high", ["class", "possibility", ("xmin", "ymin", "xmax", "ymax")]])            
+            n = len(infiles_info[filename][2]) if len(infiles_info[filename][2]) <= len(base_info[filename][2]) else len(base_info[filename][2]) 
             count = 0
             for prediction in infiles_info[filename][2]:
                 best_iou = 0
                 count += 1 
                 for groundtruth in base_info[filename][2]:  
-                    iou = bb_intersection_over_union(groundtruth[1], prediction[1])
+                    iou = bb_intersection_over_union(groundtruth[2], prediction[2])
                     if (iou > best_iou):
                         best_iou = iou
+                        if groundtruth[0] == prediction[0]:
+                            tmp_prd = [prediction[1], 1, prediction[0]]
+                        else:
+                            tmp_prd = [prediction[1], 0, prediction[0]]
                 average_IOU += best_iou # all IOU sum 
+                if tmp_prd[2] in predict_list.keys():
+                    predict_list[tmp_prd[2]].append(tmp_prd[:2])
+                else:
+                    predict_list[tmp_prd[2]] = [tmp_prd[:2]]
                 #print filename, ": ", iou, best_iou, average_IOU
                 if (best_iou >= IOU_thresh):
                     correct +=1 #good IOU count
@@ -125,20 +147,51 @@ def CaculateIOU( base_info, infiles_info ):
     average_IOU = average_IOU/total
     recall = float(correct)/float(total)
     #print correct, total
-    return (recall, average_IOU)
+    return (recall, average_IOU, predict_list, total)
 
+def ap(predict_rst, positive_num, total):
+    #[possibilty, true/false]
+    predict_rst.sort(key=lambda tup: tup[0], reverse=True)
+    apv = 0.0
+    print predict_rst
+    last_recall = 0.0
+    for i in range(1, total):
+        TP = 0.0        
+        if i > len(predict_rst):
+            break
+        for j in range(0, i):
+            TP += predict_rst[j][1]
+        precision = TP/i
+        recall = TP/positive_num
+        apv += precision*(recall - last_recall)
+        last_recall = recall
+        print precision, recall, apv
+    return apv
+
+
+def CaculateAveragePrecise(predict_list, gt_dict, total):
+    all_ap = 0.0
+    for cls in predict_list.keys():
+        if cls in gt_dict.keys():            
+            if gt_dict[cls] == 0:
+                print "%s positive number is 0" % (cls)
+                continue
+            all_ap += ap(predict_list[cls], gt_dict[cls], total)
+        
+    return all_ap/len(gt_dict.keys())
 
 def main(infiles, basefiles, outfile):
     """main function"""
     recall = 0
     mIOU = 0
     mAP=0 
-    base_info = InforfromXml(basefiles)
-    infiles_info = InforfromXml(infiles)
+    base_info, gt_dict = InforfromXml(basefiles, gt_flag=True)
+    infiles_info, pred_dict = InforfromXml(infiles)
+
     if(((not base_info is None) and len(base_info) > 0)
         and ((not infiles_info is None) and len(infiles_info) > 0)):        
-        recall, mIOU = CaculateIOU(base_info, infiles_info)
-        #mAP = CaculateAveragePrecise(base_info, infiles_info)         
+        recall, mIOU, predict_list, total = CaculateIOU(base_info, infiles_info)
+        mAP = CaculateAveragePrecise(predict_list, gt_dict, total)         
     out_file = open(outfile, 'w')
     out_file.write("recall: %f, mIOU: %f, mAP: %f\n" % (recall, mIOU, mAP))
 
