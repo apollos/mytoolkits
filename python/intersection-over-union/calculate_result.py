@@ -153,7 +153,7 @@ def ap(predict_rst, positive_num, total):
     #[possibilty, true/false]
     predict_rst.sort(key=lambda tup: tup[0], reverse=True)
     apv = 0.0
-    print predict_rst
+    #print predict_rst
     last_recall = 0.0
     for i in range(1, total):
         TP = 0.0        
@@ -165,7 +165,7 @@ def ap(predict_rst, positive_num, total):
         recall = TP/positive_num
         apv += precision*(recall - last_recall)
         last_recall = recall
-        print precision, recall, apv
+        #print precision, recall, apv
     return apv
 
 

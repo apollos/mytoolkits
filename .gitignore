@@ -3,3 +3,6 @@
 *.rst
 .project
 .settings/
+labelfile/
+*.swp
+result.txt

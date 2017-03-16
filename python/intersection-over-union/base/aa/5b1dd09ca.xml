@@ -1,0 +1,27 @@
+<?xml version="1.0" ?>
+<annotation>
+	<folder>1-1</folder>
+	<filename>5b1dd09ca</filename>
+	<path>D:\ibm img\1-1\5b1dd09ca.png</path>
+	<source>
+		<database>Unknown</database>
+	</source>
+	<size>
+		<width>800</width>
+		<height>533</height>
+		<depth>3</depth>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>mask</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<bndbox>
+			<xmin>341</xmin>
+			<ymin>10</ymin>
+			<xmax>570</xmax>
+			<ymax>347</ymax>
+		</bndbox>
+	</object>
+</annotation>
