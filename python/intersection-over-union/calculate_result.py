@@ -121,7 +121,9 @@ def CaculateIOU( base_info, infiles_info ):
     correct = 0
     predict_list = {}
     max_IOU = 0
-    min_IOU = 0
+    min_IOU = 1
+    best_file=""
+    worst_file = ""
 
     for filename in base_info:
         total += len(base_info[filename][2])
@@ -141,6 +143,12 @@ def CaculateIOU( base_info, infiles_info ):
                         else:
                             tmp_prd = [prediction[1], 0, prediction[0]]
                 average_IOU += best_iou # all IOU sum 
+                if (best_iou > max_IOU):
+                        max_IOU = best_iou
+                        best_file = filename
+                if (best_iou < min_IOU):
+                        min_IOU = best_iou
+                        worst_file = filename
                 if tmp_prd[2] in predict_list.keys():
                     predict_list[tmp_prd[2]].append(tmp_prd[:2])
                 else:
@@ -153,6 +161,7 @@ def CaculateIOU( base_info, infiles_info ):
     average_IOU = average_IOU/total
     recall = float(correct)/float(total)
     #print correct, total
+    print "best %s; worst %s" % (best_file, worst_file)
     return (recall, average_IOU, predict_list, total)
 
 def ap(predict_rst, positive_num, total):
