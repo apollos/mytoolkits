@@ -39,8 +39,12 @@ def genXmlDict(fileLst, file_path, gt_flag=False):
         root = tree.getroot()
         
         size = root.find('size')
-        w = int(size.find('width').text)
-        h = int(size.find('height').text)
+        try:
+            w = int(size.find('width').text)
+            h = int(size.find('height').text)
+        except:
+            print "miss key value in %s" % (xmlfile)
+            return (xmlDict, gtDict)
         if ((w is None) or (h is None)):
             continue
         items = []
@@ -116,6 +120,8 @@ def CaculateIOU( base_info, infiles_info ):
     total = 0
     correct = 0
     predict_list = {}
+    max_IOU = 0
+    min_IOU = 0
 
     for filename in base_info:
         total += len(base_info[filename][2])

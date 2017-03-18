@@ -24,7 +24,7 @@ def get_file_list(in_pic, in_label, gt_label):
     replace_patt = re.compile("\.\w+")
 
     if not (exists(in_pic) and exists(in_label)):
-        print("%s or does not exists" % (in_pic, in_label))
+        print("%s or %s does not exists" % (in_pic, in_label))
         return []
     if ((not gt_label is None) and (not exists(gt_label))):
         print("%s does not exists" % (gt_label))
@@ -56,8 +56,9 @@ def get_file_list(in_pic, in_label, gt_label):
                 if listdir(in_label) and exists("%s/%s" % (in_label, xmlfile)):
                     file_group.append("%s/%s" % (in_label, xmlfile))
                 else:
-                    print("%s is not correct" % (in_label))
-                    return []
+                    print("%s/%s is not correct" % (in_label, xmlfile))
+                    #return []
+                    continue
 
                 if (not gt_label is None):
                     if (listdir(gt_label)) and exists("%s/%s" % (gt_label, xmlfile)):
