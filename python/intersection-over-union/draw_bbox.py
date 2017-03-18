@@ -111,13 +111,19 @@ def main(in_pic, in_label, gt_label=None, save=False):
 	        # bounding box
             #print obj
             #print obj[1][:2]
-            cv2.putText(image, obj[0], (obj[1][0], obj[1][1]-6), cv2.FONT_HERSHEY_COMPLEX_SMALL,0.8, (0, 255, 0) )
+            if (obj[1][1] > 10):
+                cv2.putText(image, obj[0], (obj[1][0], obj[1][1]-6), cv2.FONT_HERSHEY_COMPLEX_SMALL,0.8, (0, 255, 0) )
+            else:
+                cv2.putText(image, obj[0], (obj[1][0], obj[1][1]+15), cv2.FONT_HERSHEY_COMPLEX_SMALL,0.8, (0, 255, 0) )
             cv2.rectangle(image, obj[1][:2], obj[1][2:], (0, 255, 0), 2) #green
         
         if(len(file_group) == 3):
             xml = genXmlInfo(file_group[2])
             for obj in xml:
-                cv2.putText(image, obj[0], (obj[1][0], obj[1][1]-6), cv2.FONT_HERSHEY_COMPLEX_SMALL,0.8, (0, 0, 255) )
+                if (obj[1][1] > 10):
+                    cv2.putText(image, obj[0], (obj[1][0], obj[1][1]-6), cv2.FONT_HERSHEY_COMPLEX_SMALL,0.8, (0, 0, 255) )
+                else:
+                    cv2.putText(image, obj[0], (obj[1][0], obj[1][1]+15), cv2.FONT_HERSHEY_COMPLEX_SMALL,0.8, (0, 0, 255) )
                 cv2.rectangle(image, obj[1][:2], obj[1][2:], (0, 0, 255), 2)	  #red  
         
         # show the output imag
