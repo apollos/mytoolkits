@@ -4,8 +4,10 @@ import random
 
 
 def separate_file_list(full_file_list):
-    full_file_list = random.shuffle(full_file_list)
-    return full_file_list[:int(len(full_file_list)*0.8)], full_file_list[int(len(full_file_list)*0.8):]
+    if full_file_list is not None and len(full_file_list) > 0:
+        full_file_list = random.shuffle(full_file_list)
+        return full_file_list[:int(len(full_file_list)*0.8)], full_file_list[int(len(full_file_list)*0.8):]
+    return [], []
 
 
 def main(input_path, output_path):
@@ -25,7 +27,7 @@ def main(input_path, output_path):
             file_set = os.listdir(class_path)
             for file_lst in file_set:
                 file_name, file_ext = os.path.splitext(file_lst)
-                if file_ext in (".jpg", ".JPG", ".png"):
+                if file_ext in (".jpg", ".JPEG", ".png"):
                     full_file_list.append(os.path.join(class_path, file_lst))
                 else:
                     print("Unknown file: %s" % (os.path.join(class_path, file_lst)))
