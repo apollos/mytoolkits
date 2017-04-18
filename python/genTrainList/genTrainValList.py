@@ -19,15 +19,18 @@ def main(input_path, output_path):
     output_file_train = open("%s/train.txt" % output_path, 'w')
     output_file_val = open("%s/val.txt" % output_path, 'w')
     for class_path in class_path_set:
+        class_path = os.path.join(input_path, class_path)
         if os.path.isdir(class_path):
-            file_set = os.listdir(os.path.join(input_path, class_path))
             full_file_list = []
+            file_set = os.listdir(class_path)
             for file_lst in file_set:
                 file_name, file_ext = os.path.splitext(file_lst)
                 if file_ext in (".jpg", ".JPG", ".png"):
-                    full_file_list.append(os.path.join(input_path, class_path, file_lst))
+                    full_file_list.append(os.path.join(class_path, file_lst))
                 else:
-                    print("Unknown file: %s" % (os.path.join(input_path, class_path, file_lst)))
+                    print("Unknown file: %s" % (os.path.join(class_path, file_lst)))
+                    continue
+
             train_list, val_list = separate_file_list(full_file_list)
             for file_id in train_list:
                 output_file_train.write(file_id)
