@@ -6,3 +6,5 @@
 labelfile/
 *.swp
 result.txt
+.idea/
+*.iml
