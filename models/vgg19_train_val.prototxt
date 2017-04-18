@@ -10,10 +10,10 @@ layer {
   transform_param {
     mirror: true
     crop_size: 224
-    mean_file: "data/ilsvrc12/imagenet_mean.binaryproto"
+    mean_file: "/gpfs/dlfs1/user_home/songyu/imagenet-caffe/imagenet_mean.binaryproto"
   }
   data_param {
-    source: "examples/imagenet/ilsvrc12_train_lmdb"
+    source: "/gpfs/dlfs1/user_home/songyu/imagenet-caffe/ilsvrc15_train_lmdb"
     batch_size: 128
     backend: LMDB
   }
@@ -29,10 +29,10 @@ layer {
   transform_param {
     mirror: false
     crop_size: 224
-    mean_file: "data/ilsvrc12/imagenet_mean.binaryproto"
+    mean_file: "/gpfs/dlfs1/user_home/songyu/imagenet-caffe/imagenet_mean.binaryproto"
   }
   data_param {
-    source: "examples/imagenet/ilsvrc12_val_lmdb"
+    source: "/gpfs/dlfs1/user_home/songyu/imagenet-caffe/ilsvrc15_val_lmdb"
     batch_size: 128
     backend: LMDB
   }
@@ -418,7 +418,7 @@ layers {
   name: "fc8"
   type: INNER_PRODUCT
   inner_product_param {
-    num_output: 1000
+    num_output: 44
   }
 }
 layer {
