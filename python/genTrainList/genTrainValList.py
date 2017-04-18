@@ -14,6 +14,7 @@ def main(input_path, output_path):
     """main function"""
     if not os.path.exists(input_path):
         print("%s does not exist" % input_path)
+        return -1
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
