@@ -4,8 +4,8 @@ import random
 
 
 def separate_file_list(full_file_list):
-    if full_file_list is not None and len(full_file_list) > 0:
-        full_file_list = random.shuffle(full_file_list)
+    if (full_file_list is not None) and len(full_file_list) > 0:
+        random.shuffle(full_file_list)
         return full_file_list[:int(len(full_file_list)*0.8)], full_file_list[int(len(full_file_list)*0.8):]
     return [], []
 
@@ -35,9 +35,9 @@ def main(input_path, output_path):
 
             train_list, val_list = separate_file_list(full_file_list)
             for file_id in train_list:
-                output_file_train.write(file_id)
+                output_file_train.write(file_id+"\n")
             for file_id in val_list:
-                output_file_val.write(file_id)
+                output_file_val.write(file_id+"\n")
     output_file_train.close()
     output_file_val.close()
 
