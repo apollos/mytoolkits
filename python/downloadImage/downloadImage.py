@@ -35,7 +35,14 @@ def download_image(image_info, output_path):
 
 
 def crop_image(image_info, input_path, output_path):
-    img = cv2.imread(input_path)
+    try:
+        img = cv2.imread(input_path)
+    except Exception:
+        print("Failed to read %s" % input_path)
+        return
+    if img is None:
+        print ("Read Image %s Error" % input_path)
+        return
     image_id, url, left, top, right, bottom = image_info[0:6]
 
     crop = img[int(float(top)):int(float(bottom))+1,
