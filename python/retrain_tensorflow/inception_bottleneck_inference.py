@@ -2,15 +2,13 @@
 For testing through python, change and run this code.
 """
 
+import argparse
 import numpy as np
 import tensorflow as tf
 
-imagePath = '/home/yu/Downloads/solar_panel/Q1_A07170100716745_H.jpg'
-modelFullPath = '/home/yu/Downloads/solar_panel/output_graph.pb'
-labelsFullPath = '/home/yu/Downloads/solar_panel/output_labels.txt'
 
 
-def create_graph():
+def create_graph(modelFullPath):
     """Creates a graph from saved GraphDef file and returns a saver."""
     # Creates graph from saved graph_def.pb.
     with tf.gfile.FastGFile(modelFullPath, 'rb') as f:
@@ -19,7 +17,7 @@ def create_graph():
         _ = tf.import_graph_def(graph_def, name='')
 
 
-def run_inference_on_image():
+def run_inference_on_image(imagePath, labelsFullPath, modelFullPath):
     answer = None
 
     if not tf.gfile.Exists(imagePath):
@@ -29,7 +27,7 @@ def run_inference_on_image():
     image_data = tf.gfile.FastGFile(imagePath, 'rb').read()
 
     # Creates graph from saved GraphDef.
-    create_graph()
+    create_graph(modelFullPath)
 
     with tf.Session() as sess:
 
@@ -52,4 +50,27 @@ def run_inference_on_image():
 
 
 if __name__ == '__main__':
-    run_inference_on_image()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--imagePath',
+        type=str,
+        default='/home/yu/workspace/Data/solar_panel/caffe/test_image/Q1_A07170100716745_H.jpg',
+        help='Path to folders of to be predicted image.',
+        dest="imagePath"
+    )
+    parser.add_argument(
+        '--labelsFullPath',
+        type=str,
+        default='/home/yu/workspace/Data/solar_panel/caffe/weight/output_labels.txt',
+        help='Path to labels',
+        dest="labelsFullPath"
+    )
+    parser.add_argument(
+        '--modelFullPath',
+        type=str,
+        default='/home/yu/workspace/Data/weights/tensorflow/solar_panel/output_graph.pb',
+        help='Where to save the trained graph.',
+        dest="modelFullPath"
+    )
+    results = parser.parse_args()
+    run_inference_on_image(results.imagePath, results.labelsFullPath, results.modelFullPath)
