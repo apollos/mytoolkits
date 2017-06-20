@@ -9,12 +9,12 @@ layer {
   }
   transform_param {
     mirror: true
-    crop_size: 524
-    mean_file: "/home/yu/workspace/Data/solar_panel/lmdb/imagenet_mean.binaryproto"
+    crop_size: 224
+    mean_file: "/home/yu/workspace/Data/flower_photos/mean.binaryproto"
   }
   data_param {
-    source: "/home/yu/workspace/Data/solar_panel/lmdb/train"
-    batch_size: 4
+    source: "/home/yu/workspace/Data/flower_photos/train"
+    batch_size: 8
     backend: LMDB
   }
 }
@@ -28,12 +28,12 @@ layer {
   }
   transform_param {
     mirror: false
-    crop_size: 524
-    mean_file: "/home/yu/workspace/Data/solar_panel/lmdb/imagenet_mean.binaryproto"
+    crop_size: 224
+    mean_file: "/home/yu/workspace/Data/flower_photos/mean.binaryproto"
   }
   data_param {
-    source: "/home/yu/workspace/Data/solar_panel/lmdb/val"
-    batch_size: 4
+    source: "/home/yu/workspace/Data/flower_photos/val"
+    batch_size: 8
     backend: LMDB
   }
 }
@@ -418,7 +418,7 @@ layer {
   name: "fc8"
   type: "InnerProduct"
   inner_product_param {
-    num_output: 1000
+    num_output: 5
   }
 }
 layer {

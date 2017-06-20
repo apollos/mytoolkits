@@ -1,5 +1,5 @@
 net: "vgg19_train_val.prototxt"
-test_iter: 1000
+test_iter: 7
 test_interval: 100
 test_initialization: false
 display: 100
@@ -8,7 +8,7 @@ base_lr: 0.01
 lr_policy: "step"
 stepsize: 3200
 gamma: 0.96
-max_iter: 1000000
+max_iter: 100000
 momentum: 0.9
 weight_decay: 0.0002
 snapshot: 40000
