@@ -8,3 +8,4 @@ labelfile/
 result.txt
 .idea/
 *.iml
+*.log
