@@ -3,11 +3,13 @@ import os
 import fnmatch
 import mylogs
 import collections
-import numpy as np
 
-class dataclean:
+default_file_ext = ["csv", "txt"]
 
-    def __init__(self, file_ext=["csv", "txt"], header_flag=False):
+
+class DataClean:
+
+    def __init__(self, file_ext=default_file_ext, header_flag=False):
         self.recordLogs = mylogs.myLogs()
         self.file_ext = file_ext
         self.header_flag = header_flag
@@ -51,6 +53,22 @@ class dataclean:
             table_content[os.path.basename(file_path)]["df"] = self.read_content(file_path)
         self.check_df_dict(table_content)
         return table_content
+
+    def save_datafile(self, dataframe, output_path):
+        dirname = os.path.dirname(output_path)
+        if dirname != '' and not os.path.exists(dirname):
+            try:
+                os.mkdir(dirname)
+            except OSError as e:
+                self.recordLogs.logger.error("Create Path %s failed. Error Code %d" % (dirname, e.errno))
+                return
+        filename, extfile = os.path.splitext(output_path)
+        if extfile in [".txt", ".csv"]:
+            dataframe.to_csv(unicode(output_path, 'utf8'), encoding='utf-8')
+        elif extfile in [".xls", ".xlsx"]:
+            dataframe.to_excel(unicode(output_path, 'utf8'), encoding='utf-8')
+        else:
+            self.recordLogs.logger.error("Unrecognized file extension %s" % output_path)
 
     def check_df(self, df_info):
         if df_info is None:
@@ -120,7 +138,7 @@ class dataclean:
         '''shall we caculate the mean and update to one and remove others????'''
         '''Currently, it can not auotmatically process, need do it by specified method'''
         if len(non_obj_df_columns) > 0:
-            self.recordLogs.logger.warn("Can not automatically expand the columns %s" % df_dtypes)
+            self.recordLogs.logger.warn("Can not automatically expand the columns %s" % non_obj_df_columns)
             return None
         '''Start merge same key value rows'''
         '''

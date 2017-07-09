@@ -1,11 +1,8 @@
 import argparse
-import sys
 import logging
 import mylogs
 import dataclean
 
-reload(sys)
-sys.setdefaultencoding('utf-8')
 
 FLAGS = None
 csv_file_ext = "csv"
@@ -33,7 +30,7 @@ def str2bool(v):
 def main():
     # Set up the pre-trained graph.
 
-    dataclean_handle = dataclean.dataclean(file_ext=FLAGS.file_ext.split(","), header_flag=FLAGS.header)
+    dataclean_handle = dataclean.DataClean(file_ext=FLAGS.file_ext.split(","), header_flag=FLAGS.header)
     table_list = dataclean_handle.load_datafile(FLAGS.input_files)
     if FLAGS.action == 'show':
         keys = table_list.keys()
@@ -45,7 +42,20 @@ def main():
             recordLogs.logger.error("join key is not available")
             return
         out_df = dataclean_handle.join_tables(table_list, list(set(FLAGS.join_key.split(','))))
-        print out_df
+        if FLAGS.output_file is not None:
+            dataclean_handle.save_datafile(out_df, FLAGS.output_file)
+        else:
+            print(out_df)
+    elif FLAGS.action == 'fill':
+        if FLAGS.fill_column is None:
+            recordLogs.logger.error("Target column name is not filled for fill action")
+        if FLAGS.fill_value is None:
+            recordLogs.logger.error("Value to be filled is None for fill action")
+        out_df = dataclean_handle.fill_column_tables(table_list, FLAGS.fill_column, FLAGS.fill_value)
+        if FLAGS.output_file is not None:
+            dataclean_handle.save_datafile(out_df, FLAGS.output_file)
+        else:
+            print(out_df)
 
 
 if __name__ == '__main__':
@@ -61,7 +71,8 @@ if __name__ == '__main__':
     parser.add_argument(
         '--action',
         type=str,
-        choices=['show', 'join', 'fill', 'numeral', 'delete', 'expand'],
+        choices=['show', 'join', 'fill', 'numeral', 'delete', 'simple_expand', 'gen_tab_by_column',\
+                 'expand_by_column'],
         help="""\
       Actions for CVs:\n
       show: Display the head of all tables, Missing data columns, Type of columns.\n
@@ -89,10 +100,20 @@ if __name__ == '__main__':
         help='Column name(s) as the join key. It can be a single value or a list which separated by comma'
     )
     parser.add_argument(
-        '--output_files',
+        '--output_file',
         type=str,
         default='merge_table.csv',
         help='Path to folders of output csv or excel files'
+    )
+    parser.add_argument(
+        '--fill_value',
+        type=str,
+        help='Fill in value to specified column'
+    )
+    parser.add_argument(
+        '--fill_column',
+        type=str,
+        help='Column name to be filled'
     )
     FLAGS, unparsed = parser.parse_known_args()
     main()
