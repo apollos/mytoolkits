@@ -2,6 +2,7 @@ import argparse
 import logging
 import mylogs
 import dataclean
+import os
 
 
 FLAGS = None
@@ -47,16 +48,73 @@ def main():
         else:
             print(out_df)
     elif FLAGS.action == 'fill':
-        if FLAGS.fill_column is None:
+        if FLAGS.target_columns is None:
             recordLogs.logger.error("Target column name is not filled for fill action")
-        if FLAGS.fill_value is None:
+            return
+        if FLAGS.target_values is None:
             recordLogs.logger.error("Value to be filled is None for fill action")
-        out_df = dataclean_handle.fill_column_tables(table_list, FLAGS.fill_column, FLAGS.fill_value)
-        if FLAGS.output_file is not None:
-            dataclean_handle.save_datafile(out_df, FLAGS.output_file)
-        else:
-            print(out_df)
+            return
+        values = FLAGS.target_values.split(',')
+        columns = FLAGS.target_columns.split(',')
+        if len(values) != len(columns):
+            recordLogs.logger.error("Target column number is not same as targt value number")
+            return
+        for idx in range(len(values)):
+            table_list = dataclean_handle.fill_column_tables(table_list, columns[idx], values[idx])
 
+        if table_list is not None:
+            dirname = './'
+            if FLAGS.output_file is not None:
+                if os.path.isfile(FLAGS.output_file):
+                    dirname = os.path.dirname(unicode(FLAGS.output_file, 'utf-8'))
+                elif os.path.isdir(FLAGS.output_file):
+                    dirname = unicode(FLAGS.output_file, 'utf-8')
+            table_names = table_list.keys()
+            for table_name in table_names:
+                full_path = dirname+"/"+"fill_"+table_name
+                dataclean_handle.save_datafile(table_list[table_name]["df"], full_path)
+    elif FLAGS.action == 'factor':
+        if FLAGS.target_columns is None:
+            recordLogs.logger.error("Target column name is not filled for fill action")
+            return
+        columns = FLAGS.target_columns.split(',')
+
+        for idx in range(len(columns)):
+            table_list = dataclean_handle.factorize_column_tables(table_list, columns[idx])
+
+        if table_list is not None:
+            dirname = './'
+            if FLAGS.output_file is not None:
+                if os.path.isfile(FLAGS.output_file):
+                    dirname = os.path.dirname(unicode(FLAGS.output_file, 'utf-8'))
+                elif os.path.isdir(FLAGS.output_file):
+                    dirname = unicode(FLAGS.output_file, 'utf-8')
+            table_names = table_list.keys()
+            for table_name in table_names:
+                full_path = dirname+"/"+"factor_"+table_name
+                dataclean_handle.save_datafile(table_list[table_name]["df"], full_path)
+                full_path = dirname+"/"+"factor_dict_"+table_name
+                dataclean_handle.save_dictfile(table_list[table_name]["factor"], full_path)
+    elif FLAGS.action == 'delete':
+        if FLAGS.target_columns is None:
+            recordLogs.logger.error("Target column name is not filled for fill action")
+            return
+        columns = FLAGS.target_columns.split(',')
+
+        for idx in range(len(columns)):
+            table_list = dataclean_handle.delete_column_tables(table_list, columns[idx])
+
+        if table_list is not None:
+            dirname = './'
+            if FLAGS.output_file is not None:
+                if os.path.isfile(FLAGS.output_file):
+                    dirname = os.path.dirname(unicode(FLAGS.output_file, 'utf-8'))
+                elif os.path.isdir(FLAGS.output_file):
+                    dirname = unicode(FLAGS.output_file, 'utf-8')
+            table_names = table_list.keys()
+            for table_name in table_names:
+                full_path = dirname+"/"+"delete_"+table_name
+                dataclean_handle.save_datafile(table_list[table_name]["df"], full_path)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -71,14 +129,16 @@ if __name__ == '__main__':
     parser.add_argument(
         '--action',
         type=str,
-        choices=['show', 'join', 'fill', 'numeral', 'delete', 'simple_expand', 'gen_tab_by_column',\
+        choices=['show', 'join', 'fill', 'factor', 'delete', 'simple_expand', 'gen_tab_by_column',
                  'expand_by_column'],
-        help="""\
-      Actions for CVs:\n
-      show: Display the head of all tables, Missing data columns, Type of columns.\n
-      join: Join multiple CVs to one dataframe\n
-      fill: Fill the missing data\n
-      numera: Numeralization the string or chart columns
+        help="""Actions for CVs:\
+      [show: Display the head of all tables, Missing data columns, Type of columns.]\
+      [join: Join multiple CVs to one dataframe]\
+      [fill: Fill the missing data]\
+      [factor: factorize the string values to a factor list]\
+      [delete: delete specified columns from the tables]\
+      [simple_expand: automatically expand one columns to several according to the potential value to a dummy matrix]\
+      [gen_tab_by_column: Expand one column to several columns according to the specified column values]
       """
     )
     parser.add_argument(
@@ -102,18 +162,17 @@ if __name__ == '__main__':
     parser.add_argument(
         '--output_file',
         type=str,
-        default='merge_table.csv',
         help='Path to folders of output csv or excel files'
     )
     parser.add_argument(
-        '--fill_value',
+        '--target_values',
         type=str,
-        help='Fill in value to specified column'
+        help='Fill in value to specified column, it can be a list'
     )
     parser.add_argument(
-        '--fill_column',
+        '--target_columns',
         type=str,
-        help='Column name to be filled'
+        help='Column name to be filled, it can be a list'
     )
     FLAGS, unparsed = parser.parse_known_args()
     main()

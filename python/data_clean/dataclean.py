@@ -3,8 +3,10 @@ import os
 import fnmatch
 import mylogs
 import collections
+import numpy as np
 
 default_file_ext = ["csv", "txt"]
+excel_file_ext = ['xls', 'xlsx']
 
 
 class DataClean:
@@ -38,7 +40,8 @@ class DataClean:
             return None
         else:
             if os.path.isfile(input_path):
-                if os.path.splitext(input_path) in self.file_ext:
+                filename, ext_file = os.path.splitext(input_path)
+                if ext_file.replace('.', '') in self.file_ext:
                     file_list.append(input_path)
                 else:
                     self.recordLogs.logger.error("%s is not supported file" % input_path)
@@ -56,6 +59,8 @@ class DataClean:
 
     def save_datafile(self, dataframe, output_path):
         dirname = os.path.dirname(output_path)
+        if os.path.exists(output_path):
+            os.remove(output_path)
         if dirname != '' and not os.path.exists(dirname):
             try:
                 os.mkdir(dirname)
@@ -63,12 +68,17 @@ class DataClean:
                 self.recordLogs.logger.error("Create Path %s failed. Error Code %d" % (dirname, e.errno))
                 return
         filename, extfile = os.path.splitext(output_path)
-        if extfile in [".txt", ".csv"]:
-            dataframe.to_csv(unicode(output_path, 'utf8'), encoding='utf-8')
-        elif extfile in [".xls", ".xlsx"]:
-            dataframe.to_excel(unicode(output_path, 'utf8'), encoding='utf-8')
+        extfile = extfile.replace('.', '')
+        if extfile in default_file_ext:
+            dataframe.to_csv(output_path, encoding='utf-8', index=False)
+        elif extfile in excel_file_ext:
+            dataframe.to_excel(output_path, encoding='utf-8', index=False)
         else:
             self.recordLogs.logger.error("Unrecognized file extension %s" % output_path)
+
+    def save_dictfile(self, dict_data, output_path):
+        dataframe = pd.DataFrame([dict_data])
+        self.save_datafile(dataframe, output_path)
 
     def check_df(self, df_info):
         if df_info is None:
@@ -196,14 +206,14 @@ class DataClean:
         return left_key, right_key
 
     def join_tables(self, df_dict, join_key):
-        table_names = df_dict.keys()
-        if df_dict is None or len(table_names) <= 1:
+
+        if df_dict is None or len(df_dict.keys()) <= 1:
             self.recordLogs.logger.error("Wrong Table Dict")
             return None
         if join_key is None or len(join_key) == 0:
             self.recordLogs.logger.error("Wrong join_key input")
             return None
-
+        table_names = df_dict.keys()
         rst_table = None
         for table_name in table_names:
             df_info = df_dict[table_name]["df"]
@@ -232,7 +242,63 @@ class DataClean:
                 self.recordLogs.logger.error("Merge Table %s and %s KeyError. Joint Key: %s" % join_key)
             return rst_table
 
+    def fill_column_tables(self, df_dict, column_name, filled_value):
 
+        if df_dict is None or len(df_dict.keys()) < 1:
+            self.recordLogs.logger.error("Wrong Table Dict")
+            return None
+        if column_name is None:
+            self.recordLogs.logger.error("Error Column Name")
+            return None
+        if filled_value is None:
+            self.recordLogs.logger.error("Wrong Filled Value")
+            return None
+        table_names = df_dict.keys()
+        for table_name in table_names:
+            columns = list(df_dict[table_name]["df"].columns.values)
+            if column_name not in columns:
+                self.recordLogs.logger.warning("Column %s does not exist in table %s" % (column_name, table_name))
+                continue
+            df_dict[table_name]["df"][column_name].replace(np.NaN, filled_value, inplace=True)
+        return df_dict
 
+    def factorize_column_tables(self, df_dict, column_name):
+        if df_dict is None or len(df_dict.keys()) < 1:
+            self.recordLogs.logger.error("Wrong Table Dict")
+            return None
+        if column_name is None:
+            self.recordLogs.logger.error("Error Column Name")
+            return None
+        table_names = df_dict.keys()
+        for table_name in table_names:
+            columns = list(df_dict[table_name]["df"].columns.values)
+            if column_name not in columns:
+                self.recordLogs.logger.warning("Column %s does not exist in table %s" % (column_name, table_name))
+                continue
+            values = df_dict[table_name]["df"][column_name].drop_duplicates().values
+            b = [x for x in df_dict[table_name]["df"][column_name].drop_duplicates().rank(method='dense')]
+            column_dict = collections.defaultdict()
+            column_dict[column_name] = dict(zip(b, values))
+            df_dict[table_name]["factor"] = column_dict
+            df_dict[table_name]["df"][column_name] = df_dict[table_name]["df"][column_name].rank(method='dense')
+
+        return df_dict
+
+    def delete_column_tables(self, df_dict, column_name):
+        if df_dict is None or len(df_dict.keys()) < 1:
+            self.recordLogs.logger.error("Wrong Table Dict")
+            return None
+        if column_name is None:
+            self.recordLogs.logger.error("Error Column Name")
+            return None
+        table_names = df_dict.keys()
+        for table_name in table_names:
+            columns = list(df_dict[table_name]["df"].columns.values)
+            if column_name not in columns:
+                self.recordLogs.logger.warning("Column %s does not exist in table %s" % (column_name, table_name))
+                continue
+            df_dict[table_name]["df"].drop(column_name, axis=1, inplace=True)
+
+        return df_dict
 
 
