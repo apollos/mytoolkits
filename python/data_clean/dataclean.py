@@ -139,6 +139,10 @@ class DataClean:
         d1 = pd.DataFrame()
         for column_name in obj_df_columns:
             self.recordLogs.logger.info("Automatically Change column %s to multiple columns" % column_name)
+            if any(pd.isnull(df_info[column_name])):
+                self.recordLogs.logger.error("There is NaN in column %s. Please first fill it and then merge rows" %
+                                             column_name)
+                return None
             d1 = df_info[column_name].apply(lambda x: column_name+'_'+'|'.join(pd.Series(x))).str.get_dummies()
             new_df_info = pd.concat([new_df_info, d1], axis=1)
             '''remove the old column'''
@@ -161,6 +165,52 @@ class DataClean:
         new_columns = list(d1.columns.values)
         for column_name in list(new_columns):
             agg_dict[column_name] = max
+        agg_obj_df_info = new_df_info.groupby([key_column_name]).agg(agg_dict)
+        new_df_info.drop_duplicates([key_column_name], keep='first', inplace=True)
+
+        for row in agg_obj_df_info.itertuples():
+            for idx in range(len(new_columns)):
+                new_df_info.set_value(new_df_info[key_column_name] == row[0], new_columns[idx], row[idx+1])
+        return new_df_info
+
+    def merge_rows_same_key_complex(self, df_info, key_column_name, columnA, columnB):
+        if df_info is None:
+            self.recordLogs.logger.error("Wrong Table information")
+            return None
+        if columnA is None or columnB is None:
+            self.recordLogs.logger.warn("columnA or columnB is empty")
+            return None
+        new_df_info = df_info
+        if df_info[columnA].dtypes == 'object':
+            d1 = pd.DataFrame()
+            self.recordLogs.logger.info("Expand column %s to multiple columns" % columnA)
+            if any(pd.isnull(df_info[columnA])):
+                self.recordLogs.logger.error("There is NaN in column %s. Please first fill it and then merge rows" %
+                                             columnA)
+                return None
+            if any(pd.isnull(df_info[columnB])):
+                self.recordLogs.logger.error("There is NaN in column %s. Please first fill it and then merge rows" %
+                                             columnB)
+                return None
+            d1 = df_info[columnA].apply(lambda x: columnA+'_'+columnB+'_'+'|'.join(pd.Series(x))).str.get_dummies()
+            d1 = d1.mul(df_info[columnB].values).where(d1.astype(bool))
+            new_df_info = pd.concat([new_df_info, d1], axis=1)
+            '''remove the old column'''
+            new_df_info.drop(columnA, axis=1, inplace=True)
+            new_df_info.drop(columnB, axis=1, inplace=True)
+        else:
+            self.recordLogs.logger.warning("Expand column %s type is %s which is not good for expand" %
+                                           (columnA, df_info[columnA].dtypes))
+            return None
+        '''Start merge same key value rows'''
+        '''generate agg_dict'''
+        agg_dict = {}
+        new_columns = list(d1.columns.values)
+        for column_name in list(new_columns):
+            if new_df_info[column_name].dtype == "object":
+                agg_dict[column_name] = max
+            else:
+                agg_dict[column_name] = sum
         agg_obj_df_info = new_df_info.groupby([key_column_name]).agg(agg_dict)
         new_df_info.drop_duplicates([key_column_name], keep='first', inplace=True)
 
@@ -205,6 +255,64 @@ class DataClean:
 
         return left_key, right_key
 
+    def simple_expand_column(self, df_info, key_column, table_name):
+        """ check redundant"""
+        if df_info is None or key_column is None:
+            self.recordLogs.logger.error("Wrong Data Frame information or key column in Table %s" % table_name)
+            return None
+        key_column_name = self.seek_join_key(df_info, key_column)
+        if key_column_name is None or len(key_column_name) == 0:
+            self.recordLogs.logger.error("Wrong join_key %s for Table %s" % (key_column, table_name))
+            return None
+        redundant_columns = self.check_redundant_row_by_column(df_info, key_column_name)
+        if redundant_columns is not None and len(redundant_columns) > 0:
+            df_info = self.merge_rows_same_key(df_info, redundant_columns, key_column_name)
+        return df_info
+
+    def expand_column_for_tabs(self, df_dict, join_key):
+        if df_dict is None or len(df_dict.keys()) < 1:
+            self.recordLogs.logger.error("Wrong Table Dict")
+            return None
+        if join_key is None or len(join_key) == 0:
+            self.recordLogs.logger.error("Wrong join_key input")
+            return None
+        table_names = df_dict.keys()
+        for table_name in table_names:
+            df_info = self.simple_expand_column(df_dict[table_name]["df"], join_key, table_name)
+            if df_info is None:
+                return None
+            df_dict[table_name]["df"] = df_info
+        return df_dict
+
+    def expand_column_complex(self, df_dict, join_key, columnA, columnB):
+        if df_dict is None or len(df_dict.keys()) < 1:
+            self.recordLogs.logger.error("Wrong Table Dict")
+            return None
+        if join_key is None or len(join_key) == 0:
+            self.recordLogs.logger.error("Wrong join_key input")
+            return None
+        table_names = df_dict.keys()
+        for table_name in table_names:
+            """ check redundant"""
+            df_info = df_dict[table_name]["df"]
+            if df_info is None:
+                self.recordLogs.logger.error("Wrong Data Frame information in Table %s" % table_name)
+                return None
+            key_column_name = self.seek_join_key(df_info, join_key)
+            if key_column_name is None:
+                self.recordLogs.logger.error("Wrong join_key %s for Table %s" % (join_key, table_name))
+                return None
+            columns = list(df_info.columns.values)
+            if columnA not in columns or columnB not in columns:
+                self.recordLogs.logger.error("Column A %s or Column B %s is not in Table %s" %
+                                             (columnA, columnB, table_name))
+                return None
+            df_info = self.merge_rows_same_key_complex(df_info, key_column_name, columnA, columnB)
+            if df_info is None:
+                return None
+            df_dict[table_name]["df"] = df_info
+        return df_dict
+
     def join_tables(self, df_dict, join_key):
 
         if df_dict is None or len(df_dict.keys()) <= 1:
@@ -216,17 +324,9 @@ class DataClean:
         table_names = df_dict.keys()
         rst_table = None
         for table_name in table_names:
-            df_info = df_dict[table_name]["df"]
-
-            '''check redundant'''
-            key_column_name = self.seek_join_key(df_info, join_key)
-            if key_column_name is None or len(key_column_name) == 0:
-                self.recordLogs.logger.error("Wrong join_key %s for Table %s" % (join_key, table_name))
+            df_info = self.simple_expand_column(df_dict[table_name]["df"], join_key, table_name)
+            if df_info is None:
                 return None
-            redundant_columns = self.check_redundant_row_by_column(df_info, key_column_name)
-            if redundant_columns is not None and len(redundant_columns) > 0:
-                df_info = self.merge_rows_same_key(df_info, redundant_columns, key_column_name)
-
             if rst_table is None:
                 rst_table = df_info
                 continue

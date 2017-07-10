@@ -115,38 +115,84 @@ def main():
             for table_name in table_names:
                 full_path = dirname+"/"+"delete_"+table_name
                 dataclean_handle.save_datafile(table_list[table_name]["df"], full_path)
+    elif FLAGS.action == 'simple_expand':
+        if FLAGS.join_key is None:
+            recordLogs.logger.error("join_key column name is not filled for simple_expand action")
+            return
+
+        columns = FLAGS.join_key.split(',')
+
+        table_list = dataclean_handle.expand_column_for_tabs(table_list, columns)
+        if table_list is not None:
+            dirname = './'
+            if FLAGS.output_file is not None:
+                if os.path.isfile(FLAGS.output_file):
+                    dirname = os.path.dirname(unicode(FLAGS.output_file, 'utf-8'))
+                elif os.path.isdir(FLAGS.output_file):
+                    dirname = unicode(FLAGS.output_file, 'utf-8')
+            table_names = table_list.keys()
+            for table_name in table_names:
+                full_path = dirname+"/"+"simple_expand_"+table_name
+                dataclean_handle.save_datafile(table_list[table_name]["df"], full_path)
+    elif FLAGS.action == 'expand_columnA_by_columnB':
+        if FLAGS.join_key is None:
+            recordLogs.logger.error("join_key column name is not filled for simple_expand action")
+            return
+        if FLAGS.expand_column_a_b is None:
+            recordLogs.logger.error("expand_column_a_b is not filled for simple_expand action")
+            return
+        try:
+            column_a, column_b = FLAGS.expand_column_a_b.split(',')
+        except ValueError:
+            recordLogs.logger.error("expand_column_a_b can only be 'column A, column B' format")
+            return
+
+        key_columns = FLAGS.join_key.split(',')
+        table_list = dataclean_handle.expand_column_complex(table_list, key_columns, column_a, column_b)
+        if table_list is not None:
+            dirname = './'
+            if FLAGS.output_file is not None:
+                if os.path.isfile(FLAGS.output_file):
+                    dirname = os.path.dirname(unicode(FLAGS.output_file, 'utf-8'))
+                elif os.path.isdir(FLAGS.output_file):
+                    dirname = unicode(FLAGS.output_file, 'utf-8')
+            table_names = table_list.keys()
+            for table_name in table_names:
+                full_path = dirname+"/"+"simple_expand_"+table_name
+                dataclean_handle.save_datafile(table_list[table_name]["df"], full_path)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(
         '--input_files',
         type=str,
         default='',
         required=True,
         help='''Path to folders of csv or excel files, it can be single file, a folder include multiple files or a list \
-             of multiple files'''
+of multiple files'''
     )
     parser.add_argument(
         '--action',
         type=str,
-        choices=['show', 'join', 'fill', 'factor', 'delete', 'simple_expand', 'gen_tab_by_column',
-                 'expand_by_column'],
-        help="""Actions for CVs:\
-      [show: Display the head of all tables, Missing data columns, Type of columns.]\
-      [join: Join multiple CVs to one dataframe]\
-      [fill: Fill the missing data]\
-      [factor: factorize the string values to a factor list]\
-      [delete: delete specified columns from the tables]\
-      [simple_expand: automatically expand one columns to several according to the potential value to a dummy matrix]\
-      [gen_tab_by_column: Expand one column to several columns according to the specified column values]
+        choices=['show', 'join', 'fill', 'factor', 'delete', 'simple_expand', 'expand_columnA_by_columnB',
+                 'separate_tab_by_column'],
+        help="""Actions for CVs:
+      show: Display the head of all tables, Missing data columns, Type of columns.
+      join: Join multiple CVs to one dataframe
+      fill: Fill the missing data
+      factor: factorize the string values to a factor list
+      delete: delete specified columns from the tables
+      simple_expand: automatically expand one columns to several according to the potential value to a dummy matrix
+      expand_columnA_by_columnB: Expand one column A to several columns according to the specified column B values
+      separate_tab_by_column: Generate new csv files by a column content
       """
     )
     parser.add_argument(
         '--header',
         type=str2bool,
         default="Yes",
-        help="""Specify whether the csv file(s) including head or not.\
-        Y or N"""
+        help="""Specify whether the csv file(s) including head or not. \
+Y or N"""
     )
     parser.add_argument(
         '--file_ext',
@@ -172,7 +218,12 @@ if __name__ == '__main__':
     parser.add_argument(
         '--target_columns',
         type=str,
-        help='Column name to be filled, it can be a list'
+        help='Column name to be filled/factor/delete, it can be a list'
+    )
+    parser.add_argument(
+        '--expand_column_a_b',
+        type=str,
+        help='columnA, columnB for action expand_columnA_by_columnB'
     )
     FLAGS, unparsed = parser.parse_known_args()
     main()
