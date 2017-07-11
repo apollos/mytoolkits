@@ -16,23 +16,33 @@ class DataClean:
         self.file_ext = file_ext
         self.header_flag = header_flag
 
-    def read_content(self, filepath):
+    def read_content(self, filepath, object_column_names):
         file_df = None
+        dtype_dict = {}
+        if object_column_names is not None and len(object_column_names) > 0:
+            for column_name in object_column_names:
+                dtype_dict[column_name] = object
         if not os.path.exists(filepath):
             self.recordLogs.logger.error("%s does not exist" % filepath)
         if "csv" in self.file_ext or "txt" in self.file_ext:
             if not self.header_flag:
                 file_df = pd.read_csv(filepath, header=None)
             else:
-                file_df = pd.read_csv(filepath)
+                if len(dtype_dict) > 0:
+                    file_df = pd.read_csv(filepath, dtype=dtype_dict)
+                else:
+                    file_df = pd.read_csv(filepath)
         elif "xls" in self.file_ext or "xlsx" in self.file_ext:
             if not self.header_flag:
                 file_df = pd.read_excel(filepath, header=None)
             else:
-                file_df = pd.read_excel(filepath)
+                if len(dtype_dict) > 0:
+                    file_df = pd.read_excel(filepath, dtype=dtype_dict)
+                else:
+                    file_df = pd.read_excel(filepath, dtype=dtype_dict)
         return file_df
 
-    def load_datafile(self, input_path):
+    def load_datafile(self, input_path, object_column_names):
         table_content = collections.defaultdict(dict)
         file_list = []
         if not os.path.exists(input_path):
@@ -53,7 +63,7 @@ class DataClean:
                             file_list.append(os.path.join(unicode(root, 'utf8'), unicode(filename, 'utf8')))
         self.recordLogs.logger.info("Total File number: %d" % len(file_list))
         for file_path in file_list:
-            table_content[os.path.basename(file_path)]["df"] = self.read_content(file_path)
+            table_content[os.path.basename(file_path)]["df"] = self.read_content(file_path, object_column_names)
         self.check_df_dict(table_content)
         return table_content
 
@@ -169,8 +179,13 @@ class DataClean:
         new_df_info.drop_duplicates([key_column_name], keep='first', inplace=True)
 
         for row in agg_obj_df_info.itertuples():
-            for idx in range(len(new_columns)):
-                new_df_info.set_value(new_df_info[key_column_name] == row[0], new_columns[idx], row[idx+1])
+            """itertuples return result can not be used as dataframe
+            we have to use index to seek it
+            since use dict while groupby, we can also directly use idx from 0 to n
+            we must search the location in agg_obj_df_info and then + 1"""
+            for column_name in new_columns:
+                new_df_info.set_value(new_df_info[key_column_name] == row[0], column_name,
+                                      row[agg_obj_df_info.columns.get_loc(column_name)+1])
         return new_df_info
 
     def merge_rows_same_key_complex(self, df_info, key_column_name, columnA, columnB):
@@ -193,7 +208,9 @@ class DataClean:
                                              columnB)
                 return None
             d1 = df_info[columnA].apply(lambda x: columnA+'_'+columnB+'_'+'|'.join(pd.Series(x))).str.get_dummies()
-            d1 = d1.mul(df_info[columnB].values).where(d1.astype(bool))
+            '''d1 = d1.mul(df_info[columnB].values).where(d1.astype(bool))'''
+            for d1_column in list(d1.columns.values):
+                d1[d1_column] = d1[d1_column] * df_info[columnB].values
             new_df_info = pd.concat([new_df_info, d1], axis=1)
             '''remove the old column'''
             new_df_info.drop(columnA, axis=1, inplace=True)
@@ -206,8 +223,10 @@ class DataClean:
         '''generate agg_dict'''
         agg_dict = {}
         new_columns = list(d1.columns.values)
+
         for column_name in list(new_columns):
             if new_df_info[column_name].dtype == "object":
+                self.recordLogs.logger.warning("Merge Action may be not right in %s" % column_name)
                 agg_dict[column_name] = max
             else:
                 agg_dict[column_name] = sum
@@ -215,8 +234,10 @@ class DataClean:
         new_df_info.drop_duplicates([key_column_name], keep='first', inplace=True)
 
         for row in agg_obj_df_info.itertuples():
-            for idx in range(len(new_columns)):
-                new_df_info.set_value(new_df_info[key_column_name] == row[0], new_columns[idx], row[idx+1])
+            for column_name in new_columns:
+                new_df_info.set_value(new_df_info[key_column_name] == row[0], column_name,
+                                      row[agg_obj_df_info.columns.get_loc(column_name)+1])
+
         return new_df_info
 
     @staticmethod
@@ -401,4 +422,25 @@ class DataClean:
 
         return df_dict
 
+    def separate_tab_by_column(self, df_dict, column_name):
+        if df_dict is None or len(df_dict.keys()) < 1:
+            self.recordLogs.logger.error("Wrong Table Dict")
+            return None
+        if column_name is None:
+            self.recordLogs.logger.error("Error Column Name")
+            return None
+        table_names = df_dict.keys()
+        new_df_dict = collections.defaultdict(dict)
+        for table_name in table_names:
+            columns = list(df_dict[table_name]["df"].columns.values)
+            if len(set(column_name) & set(columns)) == 0:
+                self.recordLogs.logger.warning("Column %s does not exist in table %s" % (column_name, table_name))
+                continue
+            """We can only pick up one column as the groupby key"""
+            target_column_name = list(set(column_name) & set(columns))[0]
+            new_df_group = df_dict[table_name]["df"].groupby(target_column_name)
+            for name, group in new_df_group:
+                name = name.replace('/', '-')
+                new_df_dict[table_name][name] = group
 
+        return new_df_dict

@@ -32,7 +32,10 @@ def main():
     # Set up the pre-trained graph.
 
     dataclean_handle = dataclean.DataClean(file_ext=FLAGS.file_ext.split(","), header_flag=FLAGS.header)
-    table_list = dataclean_handle.load_datafile(FLAGS.input_files)
+    object_column_names=[]
+    if FLAGS.object_columns is not None:
+        object_column_names = FLAGS.object_columns.split(",")
+    table_list = dataclean_handle.load_datafile(FLAGS.input_files, object_column_names)
     if FLAGS.action == 'show':
         keys = table_list.keys()
         for key in keys:
@@ -158,8 +161,27 @@ def main():
                     dirname = unicode(FLAGS.output_file, 'utf-8')
             table_names = table_list.keys()
             for table_name in table_names:
-                full_path = dirname+"/"+"simple_expand_"+table_name
+                full_path = dirname+"/"+"complex_expand_"+table_name
                 dataclean_handle.save_datafile(table_list[table_name]["df"], full_path)
+    elif FLAGS.action == 'separate_tab_by_column':
+        if FLAGS.target_columns is None:
+            recordLogs.logger.error("Target column name is not set for separate_tab_by_column")
+            return
+        columns = FLAGS.target_columns.split(',')
+        new_table_list = dataclean_handle.separate_tab_by_column(table_list, columns)
+        if new_table_list is not None:
+            dirname = './'
+            if FLAGS.output_file is not None:
+                if os.path.isfile(FLAGS.output_file):
+                    dirname = os.path.dirname(unicode(FLAGS.output_file, 'utf-8'))
+                elif os.path.isdir(FLAGS.output_file):
+                    dirname = unicode(FLAGS.output_file, 'utf-8')
+            table_names = new_table_list.keys()
+            for table_name in table_names:
+                for group_name in new_table_list[table_name].keys():
+                    filename, extname = os.path.splitext(table_name)
+                    full_path = dirname+"/"+"separate_"+filename+"_groupby_"+group_name+extname
+                    dataclean_handle.save_datafile(new_table_list[table_name][group_name], full_path)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -224,6 +246,11 @@ Y or N"""
         '--expand_column_a_b',
         type=str,
         help='columnA, columnB for action expand_columnA_by_columnB'
+    )
+    parser.add_argument(
+        '--object_columns',
+        type=str,
+        help='Specify the column names of object type for load csv or xls file'
     )
     FLAGS, unparsed = parser.parse_known_args()
     main()
