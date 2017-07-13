@@ -9,13 +9,35 @@ import random
 import re
 
 import cv2
+import mylogs
+import collections
+import numpy as np
 
 FLAGS = None
 
-MAX_NUM_IMAGES_PER_CLASS = 2 ** 27 - 1  # ~134M
-MODEL_INPUT_WIDTH = 299
-MODEL_INPUT_HEIGHT = 299
-MODEL_INPUT_DEPTH = 3
+recordLogs = mylogs.myLogs()
+
+class ImageProcessConf:
+    def __init__(self):
+        self.MAX_NUM_IMAGES_PER_CLASS = 2 ** 27 - 1  # ~134M
+        self.MIN_NUM_IMAGES_PER_CLASS = 20
+        self.MODEL_INPUT_WIDTH = 299
+        self.MODEL_INPUT_HEIGHT = 299
+        self.MODEL_INPUT_DEPTH = 3
+        self.RANDOM_SEED = 65535
+        self.CROP_SCALE_THRESHOLD = 39
+        self.MIN_SCALE_THRESHOLD = 67
+        self.MAX_SCALE_THRESHOLD = 199
+        self.BRIGHTNESS_A_MIN = 10
+        self.BRIGHTNESS_A_MAX = 30
+        self.BRIGHTNESS_BIAS_MIN = 0
+        self.BRIGHTNESS_BIAS_MAX = 100
+        self.BRIGHTNESS_A_STEP = 1
+        self.BRIGHTNESS_BIAS_STEP = 1
+        self.ANGLE_MIN = 1
+        self.ANGLE_MAX = 359
+
+imageconf = ImageProcessConf()
 
 
 def create_image_lists(image_dir):
@@ -33,9 +55,9 @@ def create_image_lists(image_dir):
       into training, testing, and validation sets within each label.
     """
     if not os.path.exists(image_dir):
-        print("Image directory '" + image_dir + "' not found.")
+        recordLogs.logger.error("Image directory '" + image_dir + "' not found.")
         return None
-    result = {}
+    result = collections.defaultdict(dict)
     sub_dirs = [x[0] for x in os.walk(image_dir)]
     is_root_dir = True
     for sub_dir in sub_dirs:
@@ -47,19 +69,20 @@ def create_image_lists(image_dir):
         dir_name = os.path.basename(sub_dir)
         if dir_name == image_dir:
             continue
-        print("Looking for images in '" + dir_name + "'")
+        recordLogs.logger.info("Looking for images in '" + dir_name + "'")
         for extension in extensions:
             '''only support search one level directory'''
             file_glob = os.path.join(image_dir, dir_name, '*.' + extension)
             file_list.extend(glob.glob(file_glob))
         if not file_list:
-            print('No files found')
+            recordLogs.logger.warning('No files found')
             continue
-        if len(file_list) < 20:
-            print('WARNING: Folder has less than 20 images, which may cause issues.')
-        elif len(file_list) > MAX_NUM_IMAGES_PER_CLASS:
-            print('WARNING: Folder {} has more than {} images. Some images will '
-                  'never be selected.'.format(dir_name, MAX_NUM_IMAGES_PER_CLASS))
+        if len(file_list) < imageconf.MIN_NUM_IMAGES_PER_CLASS:
+            recordLogs.logger.warning('Folder has less than %d images, which may cause issues.' %
+                                      imageconf.MIN_NUM_IMAGES_PER_CLASS)
+        elif len(file_list) > imageconf.MAX_NUM_IMAGES_PER_CLASS:
+            recordLogs.logger.warning('Folder {0} has more than {1} images. Some images will '
+                  'never be selected.'.format(dir_name, imageconf.MAX_NUM_IMAGES_PER_CLASS))
         label_name = re.sub(r'[^a-z0-9]+', ' ', dir_name.lower())
         training_images = []
         for file_name in file_list:
@@ -90,13 +113,13 @@ def get_image_path(image_lists, label_name, index, image_dir, category):
 
     """
     if label_name not in image_lists:
-        print('Label does not exist %s.', label_name)
+        recordLogs.logger.info('Label does not exist %s.' % label_name)
     label_lists = image_lists[label_name]
     if category not in label_lists:
-        print('Category does not exist %s.', category)
+        recordLogs.logger.info('Category does not exist %s.' % category)
     category_list = label_lists[category]
     if not category_list:
-        print('Label %s has no images in the category %s.', label_name, category)
+        recordLogs.logger.info('Label %s has no images in the category %s.' % (label_name, category))
     mod_index = index % len(category_list)
     base_name = category_list[mod_index]
     sub_dir = label_lists['dir']
@@ -120,16 +143,20 @@ def get_shuffl_image_list(image_lists, ratio, seed, root):
     if ratio > 1:
         ratio = 1
     image_files = {}
+
     for key in keys:
-        tmp_list = random.shuffle(image_lists[key]['training'])
-        flip_list = [os.path.join(root, image_lists[key]['dir'], x) for x in tmp_list[:len(tmp_list)*ratio]]
+        random.shuffle(image_lists[key]['training'])
+        tmp_img_list = image_lists[key]['training']
+        flip_list = []
+        for image_file in tmp_img_list[:int(len(tmp_img_list)*ratio)]:
+            flip_list.append(os.path.join(root, image_lists[key]['dir'], image_file))
         image_files[key] = flip_list
     return image_files
 
 
 def flip_left_right(image_lists):
-    image_files = get_shuffl_image_list(image_lists, FLAGS.flip_left_right, 11, FLAGS.image_dir)
-    keys = image_files.keys()
+    image_dicts = get_shuffl_image_list(image_lists, FLAGS.flip_left_right, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_dicts.keys()
     if FLAGS.output_dir is None:
         output_path_root = FLAGS.image_dir
     else:
@@ -138,8 +165,12 @@ def flip_left_right(image_lists):
     for key in keys:
         output_path = os.path.join(output_path_root, image_lists[key]['dir'])
         if not os.path.exists(output_path):
-            os.mkdir(output_path)
-        for image_file in image_files[key]:
+            try:
+                os.makedirs(output_path)
+            except OSError as exc:  # Python >2.5
+                recordLogs.logger.error("makedirs failed %d" % exc.errno)
+                return
+        for image_file in image_dicts[key]:
             try:
                 img = cv2.imread(image_file)
                 flip_mode = random.randrange(-1, 2, 1)
@@ -147,13 +178,13 @@ def flip_left_right(image_lists):
                 output_file = os.path.join(output_path, "flip_" + os.path.basename(image_file))
                 cv2.imwrite(output_file, new_img)
             except cv2.error:
-                print("OpenCV error({0})".format(image_file))
+                recordLogs.logger.error("OpenCV error({0})".format(image_file))
                 continue
 
 
 def random_crop(image_lists):
-    image_files = get_shuffl_image_list(image_lists, FLAGS.flip_left_right, 13, FLAGS.image_dir)
-    keys = image_files.keys()
+    image_dicts = get_shuffl_image_list(image_lists, FLAGS.random_crop, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_dicts.keys()
     if FLAGS.output_dir is None:
         output_path_root = FLAGS.image_dir
     else:
@@ -162,11 +193,11 @@ def random_crop(image_lists):
         output_path = os.path.join(output_path_root, image_lists[key]['dir'])
         if not os.path.exists(output_path):
             os.mkdir(output_path)
-        for image_file in image_files[key]:
+        for image_file in image_dicts[key]:
             try:
                 img = cv2.imread(image_file)
                 height, width, channels = img.shape
-                scale_value = random.randint(1, 39)
+                scale_value = random.randint(1, imageconf.CROP_SCALE_THRESHOLD)
                 scale_height = int(height * (1 - scale_value / 100))
                 scale_width = int(width * (1 - scale_value / 100))
                 start_y = random.randint(0, height - scale_height)
@@ -174,11 +205,11 @@ def random_crop(image_lists):
                 cropped = img[start_y:start_y+scale_height, start_x:start_x+scale_width]
                 resize_flag = False
                 output_file = os.path.join(output_path, "crop_" + os.path.basename(image_file))
-                if scale_height < MODEL_INPUT_HEIGHT:
-                    scale_height = MODEL_INPUT_HEIGHT
+                if scale_height < imageconf.MODEL_INPUT_HEIGHT:
+                    scale_height = imageconf.MODEL_INPUT_HEIGHT
                     resize_flag = True
-                if scale_width < MODEL_INPUT_WIDTH:
-                    scale_width = MODEL_INPUT_WIDTH
+                if scale_width < imageconf.MODEL_INPUT_WIDTH:
+                    scale_width = imageconf.MODEL_INPUT_WIDTH
                     resize_flag = True
                 if resize_flag:
                     resized = cv2.resize(cropped, (scale_width, scale_height), interpolation=cv2.INTER_AREA)
@@ -186,7 +217,115 @@ def random_crop(image_lists):
                 else:
                     cv2.imwrite(output_file, cropped)
             except cv2.error:
-                print("OpenCV error({0})".format(image_file))
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
+
+def random_scale(image_lists):
+    image_list_dict = get_shuffl_image_list(image_lists, FLAGS.random_scale, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                height, width, channels = img.shape
+                scale_value = random.randint(imageconf.MIN_SCALE_THRESHOLD, imageconf.MAX_SCALE_THRESHOLD)
+                scale_height = int(height * (scale_value / 100))
+                scale_width = int(width * (scale_value / 100))
+                output_file = os.path.join(output_path, "scale_" + os.path.basename(image_file))
+                resized = cv2.resize(img, (scale_width, scale_height), interpolation=cv2.INTER_AREA)
+                cv2.imwrite(output_file, resized)
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
+
+def random_brightness(image_lists):
+    image_list_dict = get_shuffl_image_list(image_lists, FLAGS.random_brightness, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+                a = random.randrange(imageconf.BRIGHTNESS_A_MIN, imageconf.BRIGHTNESS_A_MAX,
+                                     imageconf.BRIGHTNESS_A_STEP)/10
+                b = random.randrange(imageconf.BRIGHTNESS_BIAS_MIN, imageconf.BRIGHTNESS_BIAS_MAX,
+                                     imageconf.BRIGHTNESS_BIAS_STEP)
+                hsv[:, :, 2] = a * hsv[:, :, 2] + b
+                img = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+                output_file = os.path.join(output_path, "brightness_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, img)
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
+
+def random_rotation(image_lists):
+    image_list_dict = get_shuffl_image_list(image_lists, FLAGS.random_rotation, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                height, width, channels = img.shape
+                (cX, cY) = (width // 2, height // 2)
+                angle = random.randrange(imageconf.ANGLE_MIN, imageconf.ANGLE_MAX, 1)
+                M = cv2.getRotationMatrix2D((cX, cY), -angle, 1.0)
+                cos = np.abs(M[0, 0])
+                sin = np.abs(M[0, 1])
+                nW = int((height * sin) + (width * cos))
+                nH = int((height * cos) + (width * sin))
+                M[0, 2] += (nW / 2) - cX
+                M[1, 2] += (nH / 2) - cY
+                img = cv2.warpAffine(img, M, (nW, nH))
+                output_file = os.path.join(output_path, "rot_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, img)
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
+
+def random_noise(image_lists):
+    image_list_dict = get_shuffl_image_list(image_lists, FLAGS.random_noise, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                noisy1 = img + float(np.random.randint(1, 30, 1))/11 * img.std() * np.random.random(img.shape)
+                output_file = os.path.join(output_path, "noise_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, noisy1)
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
                 continue
 
 
@@ -196,7 +335,7 @@ def main():
     image_lists = create_image_lists(FLAGS.image_dir)
     class_count = len(image_lists.keys())
     if class_count == 0:
-        print('No valid folders of images found at ' + FLAGS.image_dir)
+        recordLogs.logger.info('No valid folders of images found at ' + FLAGS.image_dir)
         return -1
 
     # See if the command-line flags mean we're applying any distortions.
@@ -209,9 +348,9 @@ def main():
     if FLAGS.random_brightness > 0:
         random_brightness(image_lists)
     if FLAGS.random_rotation > 0:
-        random_scale(image_lists)
+        random_rotation(image_lists)
     if FLAGS.random_noise > 0:
-        random_brightness(image_lists)
+        random_noise(image_lists)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -235,7 +374,6 @@ if __name__ == '__main__':
         help="""\
       A percentage of randomly flip half of the training images horizontally.\
       """,
-        action='store_true'
     )
     parser.add_argument(
         '--random_crop',
