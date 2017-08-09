@@ -98,10 +98,9 @@ def main(in_pic, in_label, gt_label=None, save=False):
         return
     #print filelist
     label_image_path = "label_image"
-    if(save):
-        if exists(label_image_path):
-            rmdir(label_image_path)
-        mkdir(label_image_path)
+    if(save=="True"):
+        if not exists(label_image_path):
+            mkdir(label_image_path)
     for file_group in filelist:
     # load the image
         image = cv2.imread(file_group[0])
@@ -127,7 +126,7 @@ def main(in_pic, in_label, gt_label=None, save=False):
                 cv2.rectangle(image, obj[1][:2], obj[1][2:], (0, 0, 255), 2)	  #red  
         
         # show the output imag
-        if(save):
+        if(save=="True"):
             filename = basename(file_group[0])
             cv2.imwrite("%s/%s" % (label_image_path, filename), image)
         else:
