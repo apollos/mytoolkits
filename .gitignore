@@ -9,4 +9,5 @@ result.txt
 .idea/
 *.iml
 *.log
-python/word_segmentation/data/*
+*/data/*
+python/genTrainList/data/*

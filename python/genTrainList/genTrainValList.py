@@ -18,7 +18,17 @@ def copyfile(source_file, output_path, type_name, class_name):
     shutil.copy2(source_file, target_path)
 
 
-def main(input_path, output_path, copy_str_flag):
+def write_list2file(fd, data_list, copy_flag, output_path, type_name, label_flag, label, class_path):
+    for file_id in data_list:
+        if label_flag:
+            fd.write(file_id+" %s \n" % label)
+        else:
+            fd.write(file_id+"\n")
+        if copy_flag:
+            copyfile(file_id, output_path, type_name, class_path)
+
+
+def main(input_path, output_path, copy_str_flag, label_flag):
     """main function"""
     if not os.path.exists(input_path):
         print("%s does not exist" % input_path)
@@ -29,14 +39,20 @@ def main(input_path, output_path, copy_str_flag):
         copy_flag = True
     else:
         copy_flag = False
+    if label_flag.lower() == 'true':
+        label_flag = True
+    else:
+        label_flag = False
 
     class_path_set = os.listdir(input_path)
     output_file_train = open("%s/train.txt" % output_path, 'w')
     output_file_val = open("%s/val.txt" % output_path, 'w')
     output_file_test = open("%s/test.txt" % output_path, 'w')
+    synsets_dir_list = []
     for class_path in class_path_set:
         full_class_path = os.path.join(input_path, class_path)
         if os.path.isdir(full_class_path):
+            synsets_dir_list.append(class_path)
             full_file_list = []
             file_set = os.listdir(full_class_path)
             for file_lst in file_set:
@@ -48,20 +64,20 @@ def main(input_path, output_path, copy_str_flag):
                     continue
 
             train_list, val_list, test_list = separate_file_list(full_file_list)
-            for file_id in train_list:
-                output_file_train.write(file_id+"\n")
-                if copy_flag:
-                    copyfile(file_id, output_path, "train", class_path)
-            for file_id in val_list:
-                output_file_val.write(file_id+"\n")
-                if copy_flag:
-                    copyfile(file_id, output_path, "val", class_path)
-            for file_id in test_list:
-                output_file_test.write(file_id+"\n")
-                if copy_flag:
-                    copyfile(file_id, output_path, "test", class_path)
+            write_list2file(output_file_train, train_list, copy_flag, output_path, "train", label_flag, len(synsets_dir_list)-1,
+                            class_path)
+            write_list2file(output_file_val, val_list, copy_flag, output_path, "val", label_flag, len(synsets_dir_list)-1,
+                            class_path)
+            write_list2file(output_file_test, test_list, copy_flag, output_path, "test", label_flag, len(synsets_dir_list)-1,
+                            class_path)
+
+    if label_flag:
+        output_file_synsets = open("%s/synsets.txt" % output_path, 'w')
+        output_file_synsets.write('\n'.join(class_path_set))
+        output_file_synsets.close()
     output_file_train.close()
     output_file_val.close()
+    output_file_test.close()
 
 
 if __name__ == "__main__":
@@ -73,5 +89,7 @@ if __name__ == "__main__":
                         type=str, required=True, dest="output_path")
     parser.add_argument('-c', "--copy", action="store", help="Specify whether copy the source data to output folder",
                         type=str, required=True, choices=['True', 'False'],  dest="copy_flag")
+    parser.add_argument('-l', "--label", action="store", help="Specify whether add label after each data",
+                        type=str, required=True, choices=['True', 'False'], dest="label_flag")
     results = parser.parse_args()
-    main(results.input_path, results.output_path, results.copy_flag)
+    main(results.input_path, results.output_path, results.copy_flag, results.label_flag)
