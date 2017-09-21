@@ -147,6 +147,7 @@ class DataClean:
         new_df_info = df_info
         obj_df_columns = list(df_info[different_columns].select_dtypes(include=['object']).columns.values)
         d1 = pd.DataFrame()
+        new_columns = []
         for column_name in obj_df_columns:
             self.recordLogs.logger.info("Automatically Change column %s to multiple columns" % column_name)
             if any(pd.isnull(df_info[column_name])):
@@ -154,7 +155,10 @@ class DataClean:
                                              column_name)
                 return None
             d1 = df_info[column_name].apply(lambda x: column_name+'_'+'|'.join(pd.Series(x))).str.get_dummies()
+
             new_df_info = pd.concat([new_df_info, d1], axis=1)
+            new_columns.extend(list(d1.columns.values))
+
             '''remove the old column'''
             new_df_info.drop(column_name, axis=1, inplace=True)
         '''must first deal with object type and then deal with int'''
@@ -171,10 +175,12 @@ class DataClean:
             df_info.loc[df_info[key_column_name] == row_key].apply(self.merge_row)
         '''
         '''generate agg_dict'''
+
         agg_dict = {}
-        new_columns = list(d1.columns.values)
+
         for column_name in list(new_columns):
             agg_dict[column_name] = max
+
         agg_obj_df_info = new_df_info.groupby([key_column_name]).agg(agg_dict)
         new_df_info.drop_duplicates([key_column_name], keep='first', inplace=True)
 
@@ -183,6 +189,7 @@ class DataClean:
             we have to use index to seek it
             since use dict while groupby, we can also directly use idx from 0 to n
             we must search the location in agg_obj_df_info and then + 1"""
+
             for column_name in new_columns:
                 new_df_info.set_value(new_df_info[key_column_name] == row[0], column_name,
                                       row[agg_obj_df_info.columns.get_loc(column_name)+1])
@@ -383,6 +390,39 @@ class DataClean:
             df_dict[table_name]["df"][column_name].replace(np.NaN, filled_value, inplace=True)
         return df_dict
 
+    def fill_column_tables_by_calculate(self, df_dict, joint_key, column_name):
+        if df_dict is None or len(df_dict.keys()) < 1:
+            self.recordLogs.logger.error("Wrong Table Dict")
+            return None
+        if column_name is None:
+            self.recordLogs.logger.error("Error Column Name")
+            return None
+        if joint_key is None:
+            self.recordLogs.logger.error("Wrong Filled joint_key")
+            return None
+        table_names = df_dict.keys()
+        for table_name in table_names:
+            columns = list(df_dict[table_name]["df"].columns.values)
+            if column_name not in columns:
+                self.recordLogs.logger.warning("Column %s does not exist in table %s" % (column_name, table_name))
+                continue
+            if joint_key not in columns:
+                self.recordLogs.logger.error("Joint Key Column %s does not exist in table %s" % (column_name, table_name))
+                return
+            key_value_list = df_dict[table_name]["df"][joint_key].unique()
+            for key_value in key_value_list:
+                column_value_list = \
+                    df_dict[table_name]["df"].loc[df_dict[table_name]["df"][joint_key] == key_value][column_name].tolist()
+                if df_dict[table_name]["df"][column_name].dtype == 'O':
+                    filled_value = collections.Counter(column_value_list).most_common(1)[0][0]
+                else:
+                    filled_value = np.mean(column_value_list)
+                index_list = df_dict[table_name]["df"].loc[df_dict[table_name]["df"][joint_key] == key_value].index.tolist()
+                for index in index_list:
+                    df_dict[table_name]["df"].at[index, column_name] = filled_value
+
+        return df_dict
+
     def factorize_column_tables(self, df_dict, column_name):
         if df_dict is None or len(df_dict.keys()) < 1:
             self.recordLogs.logger.error("Wrong Table Dict")
@@ -444,3 +484,22 @@ class DataClean:
                 new_df_dict[table_name][name] = group
 
         return new_df_dict
+
+    def merge_columns(self, df_dict, column_list):
+        if df_dict is None or len(df_dict.keys()) < 1:
+            self.recordLogs.logger.error("Wrong Table Dict")
+            return None
+        if column_list is None:
+            self.recordLogs.logger.error("Error Column Name")
+            return None
+        table_names = df_dict.keys()
+        for table_name in table_names:
+            for column_name in column_list:
+                if df_dict[table_name]["df"][column_name].dtype != 'O':
+                    self.recordLogs.logger.info("Chang Column %s type to Object" % column_name)
+                    df_dict[table_name]["df"][column_name] = df_dict[table_name]["df"][column_name].astype('O')
+            new_column_name = "_".join(column_list)
+            df_dict[table_name]["df"][new_column_name] = \
+                df_dict[table_name]["df"][column_list].apply(lambda x: '_'.join(x), axis=1)
+
+        return df_dict

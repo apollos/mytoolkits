@@ -14,6 +14,7 @@ import numpy as np
 from gensim.models import Word2Vec
 import multiprocessing
 from gensim.models.word2vec import LineSentence
+import gensim
 
 logLevel = logging.DEBUG
 recordLogs = mylogs.myLogs(logLevel)
@@ -49,14 +50,15 @@ def clean(sentence): # 整理一下数据，有些不规范的地方
         tmp_re = re.compile(u'‘\s*')
         sentence = tmp_re.sub('', sentence)
     '''
-    tmp_re = re.compile(u'”\s*|“\s*|’\s*|‘\s*|\'\s*|\"\s*')
-    sentence = tmp_re.sub('', sentence)
+    tmp_re = re.compile(u'”\s*|“\s*|’\s*|‘\s*|\'\s*|\"\s*|【\s*|】\s*|（\s*|）\s*|{\s*|}\s*|-\s*|——\s*|_\s*')
+    sentence = tmp_re.sub(' ', sentence)
     return sentence
 
 
 def gen_label_file(input_file_list):
     content = ''
     for input_file in input_file_list:
+        recordLogs.logger.info("Read source word file %s" % input_file)
         content += open(input_file).read().decode("utf-8")
         content += "\r\n"
     content_list = content.split('\r\n')
@@ -100,15 +102,11 @@ def read_file_to_list(file_path):
     return data
 
 
-def gen_w2v_file(input_file, output_file, data):
-
-    model = Word2Vec(data, size=WORD_DIM, window=WORD2VEC_WIND, min_count=WORD2VEC_MIN_CNT,
+def gen_w2v_file(output_file, data):
+    bigram_transformer = gensim.models.Phrases(data)
+    model = Word2Vec(bigram_transformer[data], size=WORD_DIM, window=WORD2VEC_WIND, min_count=WORD2VEC_MIN_CNT,
                      workers=multiprocessing.cpu_count())
-    '''
-    model = Word2Vec(LineSentence(input_file), size=WORD_DIM, window=WORD2VEC_WIND, min_count=WORD2VEC_MIN_CNT,
-                     workers=multiprocessing.cpu_count())
-    '''
-    model.save(output_file)
+    model.wv.save(output_file)
     return model
 
 
@@ -126,13 +124,15 @@ def main():
             write_list_to_file(label_file, label)
 
     if FLAGS.gen_w2v_file:
+        recordLogs.logger.info("Start to generate the word2vector file")
         if len(data) == 0:
             data = read_file_to_list(os.path.join(FLAGS.source_dir, "data.txt"))
-        model = gen_w2v_file(os.path.join(FLAGS.source_dir, "data.txt"),
-                             os.path.join(FLAGS.output_dir, "w2v.bin"), data)
+        model = gen_w2v_file(os.path.join(FLAGS.output_dir, "w2v.bin"), data)
+        """
         rst_lst = model.wv.most_similar(u'教科书')
         for rst in rst_lst:
             print ("%s:%f\n" % (rst[0], rst[1]))
+        """
 
 
 if __name__ == '__main__':

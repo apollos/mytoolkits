@@ -55,15 +55,23 @@ def main():
             recordLogs.logger.error("Target column name is not filled for fill action")
             return
         if FLAGS.target_values is None:
-            recordLogs.logger.error("Value to be filled is None for fill action")
+            recordLogs.logger.error("Value to be filled is None for fill action. If you donot know how to fill, please fill "
+                                    "calculate")
             return
         values = FLAGS.target_values.split(',')
         columns = FLAGS.target_columns.split(',')
-        if len(values) != len(columns):
-            recordLogs.logger.error("Target column number is not same as targt value number")
-            return
-        for idx in range(len(values)):
-            table_list = dataclean_handle.fill_column_tables(table_list, columns[idx], values[idx])
+        if len(values) == 1 and values[0] == 'calculate':
+            if FLAGS.join_key is None:
+                recordLogs.logger.error("join key is not available")
+                return
+            for idx in range(len(columns)):
+                table_list = dataclean_handle.fill_column_tables_by_calculate(table_list, FLAGS.join_key, columns[idx])
+        else:
+            if len(values) != len(columns):
+                recordLogs.logger.error("Target column number is not same as targt value number")
+                return
+            for idx in range(len(values)):
+                table_list = dataclean_handle.fill_column_tables(table_list, columns[idx], values[idx])
 
         if table_list is not None:
             dirname = './'
@@ -182,6 +190,26 @@ def main():
                     filename, extname = os.path.splitext(table_name)
                     full_path = dirname+"/"+"separate_"+filename+"_groupby_"+group_name+extname
                     dataclean_handle.save_datafile(new_table_list[table_name][group_name], full_path)
+    elif FLAGS.action == 'merge':
+        if FLAGS.target_columns is None:
+            recordLogs.logger.error("Target column name is not set for merge")
+            return
+        columns = FLAGS.target_columns.split(',')
+        if len(columns) < 2:
+            recordLogs.logger.error("Target column name number less than 2")
+            return
+        table_list = dataclean_handle.merge_columns(table_list, columns)
+        if table_list is not None:
+            dirname = './'
+            if FLAGS.output_file is not None:
+                if os.path.isfile(FLAGS.output_file):
+                    dirname = os.path.dirname(unicode(FLAGS.output_file, 'utf-8'))
+                elif os.path.isdir(FLAGS.output_file):
+                    dirname = unicode(FLAGS.output_file, 'utf-8')
+            table_names = table_list.keys()
+            for table_name in table_names:
+                full_path = dirname+"/"+"merge_"+table_name
+                dataclean_handle.save_datafile(table_list[table_name]["df"], full_path)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -197,7 +225,7 @@ of multiple files'''
         '--action',
         type=str,
         choices=['show', 'join', 'fill', 'factor', 'delete', 'simple_expand', 'expand_columnA_by_columnB',
-                 'separate_tab_by_column'],
+                 'separate_tab_by_column', 'merge'],
         help="""Actions for CVs:
       show: Display the head of all tables, Missing data columns, Type of columns.
       join: Join multiple CVs to one dataframe
