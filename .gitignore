@@ -11,3 +11,5 @@ result.txt
 *.log
 */data/*
 python/genTrainList/data/*
+.DS_Store
+*/.DS_Store

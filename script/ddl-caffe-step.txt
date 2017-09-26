@@ -1,0 +1,355 @@
+## BSUB -m "p10a100 p10a101 p10a107 p10a108 p10a109 p10a112 p10a114 p10a115 p10a117 p10a118 p10a119 p10a120"
+## http://p10login3.pbm.ihost.com/wiki123/index.php/IBM_Power_AI
+
+rm -f BOC_*
+cat > BOC_prepare.lsf <<- 'EOF'
+#BSUB -L /bin/bash
+#BSUB -J "BOC_prepare"
+#BSUB -o BOC_prepare.out.%J
+#BSUB -n 4
+#BSUB -R "span[ptile=4]"
+#BSUB -R "affinity[core(5)]"
+#BSUB -R "rusage[ngpus_excl_p=4]"
+#BSUB -q "s822lc_p100nvme"
+#BSUB -x
+
+source /opt/DL/caffe/bin/caffe-activate
+export CAFFE_BIN=/opt/DL/caffe-ibm/bin
+datadir=/gpfs/gpfs_gl4_16mb/boc/ILSVRC2012/data
+sed -i \
+  -e 's:RESIZE=false:RESIZE=true:g' \
+  -e "s:TRAIN_DATA_ROOT=.*:TRAIN_DATA_ROOT=${datadir}/train/:g" \
+  -e "s:VAL_DATA_ROOT=.*:VAL_DATA_ROOT=${datadir}/val/:g" \
+examples/imagenet/create_imagenet.sh
+bash -x examples/imagenet/create_imagenet.sh
+EOF
+bsub < BOC_prepare.lsf
+bjobs
+
+##  bsub -x -L /bin/bash -q "s822lc_p100nvme" -n 48 -R "span[ptile=4]" sleep 1h
+##  #for h in p10a100 p10a101 p10a107 p10a108 p10a109 p10a112 p10a114 p10a115 p10a117 p10a118 p10a119 p10a120
+##  for h in p10a109 p10a114 p10a115 p10a117 p10a118 p10a119 p10a120
+##  do
+##   #echo "$h => $(ssh $h 'mkdir -p /nvme3T/b7p213za; ls /nvme3T/b7p213za')"
+##   echo "$h => $(ssh $h 'cp -ar /gpfs/gpfs_gl4_16mb/boc/ILSVRC2012/lmdb /nvme3T/b7p213za/lmdb')"
+##  done
+
+export PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin:$PATH
+export LD_LIBRARY_PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/lib:$LD_LIBRARY_PATH
+
+cat > BOC_bench.lsf <<- 'EOF'
+#BSUB -L /bin/bash
+#BSUB -J "BOC_bench"
+#BSUB -oo BOC_bench.out
+#BSUB -n 8
+#BSUB -R "span[ptile=4]"
+#BSUB -R "affinity[core(5)]"
+#BSUB -R "rusage[ngpus_excl_p=4]"
+#BSUB -q "s822lc_p100nvme"
+#BSUB -x
+#BSUB -m "p10a119 p10a120"
+
+export PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin:$PATH
+export LD_LIBRARY_PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/lib:$LD_LIBRARY_PATH
+
+source /opt/DL/caffe/bin/caffe-activate
+cd /gpfs/gpfs_gl4_16mb/boc/caffe
+
+sed -i -e 's|stepsize:.*|stepsize: 45000|g' models/bvlc_alexnet/solver.prototxt
+sed -i -e 's|batch_size: 256|batch_size: 1024|g' models/bvlc_alexnet/train_val.prototxt
+#IF GPU MEM capcity is not enough then change batch_size to 512
+#sed -i -e 's|batch_size: 256|batch_size: 512|g' models/bvlc_alexnet/train_val.prototxt
+#TOP1 validation
+
+POSTFIX='4x2x1'
+echo $LSB_HOSTS | tr -s ' '|tr ' ' '\n' | sort | uniq > BOC_bench-${POSTFIX}.txt
+HOSTS=$(cat BOC_bench-${POSTFIX}.txt)
+python /opt/DL/ddl/bin/rank_gen.py ${POSTFIX} $(echo $HOSTS | tr ' ' ',') > BOC_bench-${POSTFIX}.rf
+
+cat > BOC_bench-${POSTFIX}-wrapper.sh <<- 'E_WRAPPER'
+export CUDA_VISIBLE_DEVICES=$[OMPI_COMM_WORLD_LOCAL_RANK%4]
+COMMAND="numactl -l caffe train --solver=models/bvlc_alexnet/solver.prototxt -gpu 0 -bvlc -ddl '-mode b:${POSTFIX} -dump_iter 100'"
+echo "Host=$(hostname) Rank#=$OMPI_COMM_WORLD_RANK GPU=$CUDA_VISIBLE_DEVICES Command=$COMMAND"
+eval $COMMAND
+E_WRAPPER
+
+#  --mca oob tcp \
+#  --mca btl self,vader,tcp \
+#  --mca btl_tcp_if_include "ib0" \
+
+time \
+/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin/mpirun \
+  --mca btl self,vader,openib \
+  --mca btl_openib_if_exclude "mlx5_1:1" \
+  --mca btl_base_verbose 30 \
+  -x PATH \
+  -x LD_LIBRARY_PATH \
+  -n 8 \
+  -rf BOC_bench-${POSTFIX}.rf \
+  bash BOC_bench-${POSTFIX}-wrapper.sh
+
+rm -f BOC_bench-${POSTFIX}.txt BOC_bench-${POSTFIX}.rf BOC_bench-${POSTFIX}-wrapper.sh
+EOF
+bsub < BOC_bench.lsf
+
+bjobs
+
+bpeek | grep -E 'Iteration.*Testing net|accuracy|Wait'
+
+##########################
+
+bsub -x -L /bin/bash -m p10a109 -q "s822lc_p100nvme" -n 1 sleep 8h
+bjobs
+ssh p10a109
+
+##########################
+
+bash Anaconda2-4.4.0.1-Linux-ppc64le.sh -b -f -p /gpfs/gpfs_gl4_16mb/boc/anaconda2
+export PATH=/gpfs/gpfs_gl4_16mb/boc/anaconda2/bin:$PATH
+pip install pyftpdlib
+python -mpyftpdlib -p 2121 -w
+
+lftp ftp://p10login1.pbm.ihost.com:2121 <<- EOF
+put -c ILSVRC2012_img.squashfs
+EOF
+
+cd /gpfs/gpfs_gl4_16mb/boc/ompi/openmpi-2.0.3
+./configure \
+--prefix=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3 \
+--enable-java=no \
+--enable-mpi-cxx \
+--enable-shared \
+--enable-builtin-atomics \
+--enable-mpi-thread-multiple \
+--with-cuda=/usr/local/cuda \
+--with-verbs \
+--with-hwloc=internal
+make -j8 install
+
+export PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin:$PATH
+export LD_LIBRARY_PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/lib:$LD_LIBRARY_PATH
+cp -arv /usr/local/cuda/samples/0_Simple/simpleMPI/ .
+cd simpleMPI/
+cat > simpleMPI.lsf <<- 'EOF'
+#BSUB -L /bin/bash
+#BSUB -J "simpleMPI"
+#BSUB -oo simpleMPI.out
+#BSUB -n 8
+#BSUB -R "span[ptile=4]"
+#BSUB -q "s822lc_p100nvme"
+#BSUB -x
+
+export PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin:$PATH
+export LD_LIBRARY_PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/lib:$LD_LIBRARY_PATH
+
+cd /gpfs/gpfs_gl4_16mb/boc/simpleMPI
+cat > simpleMPI-wrapper.sh <<- 'E_WRAPPER'
+export CUDA_VISIBLE_DEVICES=$[OMPI_COMM_WORLD_LOCAL_RANK%4]
+COMMAND="./simpleMPI"
+echo "Host=$(hostname) Rank#=$OMPI_COMM_WORLD_RANK GPU=$CUDA_VISIBLE_DEVICES Command=$COMMAND"
+eval $COMMAND
+E_WRAPPER
+
+echo $LSB_HOSTS | tr -s ' '|tr ' ' '\n' | sort | uniq > simpleMPI-hosts.txt
+HOSTS=$(cat simpleMPI-hosts.txt)
+python /opt/DL/ddl/bin/rank_gen.py 4x2x1 $(echo $HOSTS | tr ' ' ',') > simpleMPI-4x2x1.rf
+
+
+/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin/mpirun \
+  --mca oob tcp \
+  --mca btl self,vader,tcp \
+  --mca btl_tcp_if_include "ib0" \
+  -x PATH \
+  -x LD_LIBRARY_PATH \
+  -rf simpleMPI-4x2x1.rf \
+  -np 8 \
+  bash simpleMPI-wrapper.sh
+
+rm -f simpleMPI-hosts.txt
+EOF
+bsub < simpleMPI.lsf
+
+tail -n +$(grep -n 'The output' simpleMPI.out|cut -f1 -d':') simpleMPI.out
+# The output (if any) follows:
+#
+# Host=p10a114 Rank#=0 GPU=0 Command=./simpleMPI
+# Host=p10a114 Rank#=2 GPU=1 Command=./simpleMPI
+# Host=p10a114 Rank#=4 GPU=2 Command=./simpleMPI
+# Host=p10a114 Rank#=6 GPU=3 Command=./simpleMPI
+# Host=p10a119 Rank#=3 GPU=1 Command=./simpleMPI
+# Host=p10a119 Rank#=1 GPU=0 Command=./simpleMPI
+# Host=p10a119 Rank#=5 GPU=2 Command=./simpleMPI
+# Host=p10a119 Rank#=7 GPU=3 Command=./simpleMPI
+# Running on 8 nodes
+# Average of square roots is: 0.667337
+# PASSED
+
+export PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin:$PATH
+export LD_LIBRARY_PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/lib:$LD_LIBRARY_PATH
+
+cat > simpleMPI.lsf <<- 'EOF'
+#BSUB -L /bin/bash
+#BSUB -J "simpleMPI"
+#BSUB -oo simpleMPI.out
+#BSUB -n 8
+#BSUB -R "span[ptile=4]"
+#BSUB -q "s822lc_p100nvme"
+#BSUB -x
+
+export PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin:$PATH
+export LD_LIBRARY_PATH=/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/lib:$LD_LIBRARY_PATH
+
+cd /gpfs/gpfs_gl4_16mb/boc/simpleMPI
+cat > simpleMPI-wrapper.sh <<- 'E_WRAPPER'
+export CUDA_VISIBLE_DEVICES=$[OMPI_COMM_WORLD_LOCAL_RANK%4]
+COMMAND="./simpleMPI"
+echo "Host=$(hostname) Rank#=$OMPI_COMM_WORLD_RANK GPU=$CUDA_VISIBLE_DEVICES Command=$COMMAND"
+eval $COMMAND
+E_WRAPPER
+
+echo $LSB_HOSTS | tr -s ' '|tr ' ' '\n' | sort | uniq > simpleMPI-hosts.txt
+HOSTS=$(cat simpleMPI-hosts.txt)
+python /opt/DL/ddl/bin/rank_gen.py 4x2x1 $(echo $HOSTS | tr ' ' ',') > simpleMPI-4x2x1.rf
+
+ulimit -a
+
+/gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin/mpirun \
+  --mca btl self,vader,openib \
+  --mca btl_openib_if_exclude "mlx5_1:1" \
+  -x PATH \
+  -x LD_LIBRARY_PATH \
+  -rf simpleMPI-4x2x1.rf \
+  -np 8 \
+  bash simpleMPI-wrapper.sh
+
+rm -f simpleMPI-hosts.txt simpleMPI-wrapper.sh
+EOF
+bsub < simpleMPI.lsf
+
+## /gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin/mpirun \
+##   -x PATH \
+##   -x LD_LIBRARY_PATH \
+##   -rf simpleMPI-4x2x1.rf \
+##   -np 8 \
+##   bash simpleMPI-wrapper.sh
+###
+## Failed to create a completion queue (CQ):
+##
+## Hostname: p10a112
+## Requested CQE: 16384
+## Error:    Cannot allocate memory
+##
+## Check the CQE attribute.
+## --------------------------------------------------------------------------
+## --------------------------------------------------------------------------
+## Open MPI has detected that there are UD-capable Verbs devices on your
+## system, but none of them were able to be setup properly.  This may
+## indicate a problem on this system.
+##
+## You job will continue, but Open MPI will ignore the "ud" oob component
+## in this run.
+##
+## Hostname: p10a112
+## --------------------------------------------------------------------------
+## Running on 8 nodes
+## 1: error exit from mca_btl_openib_proc_create
+## 1: error exit from mca_btl_openib_proc_create
+## [p10a119][[43338,1],1][btl_tcp_endpoint.c:800:mca_btl_tcp_endpoint_complete_connect] connect() to 129.40.49.112 failed: No route to host (113)
+
+## /gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin/mpirun \
+## --mca btl self,vader,openib \
+## -x PATH \
+## -x LD_LIBRARY_PATH \
+## -rf simpleMPI-4x2x1.rf \
+## -np 8 \
+## bash simpleMPI-wrapper.sh
+####
+## Failed to create a completion queue (CQ):
+##
+## Hostname: p10a112
+## Requested CQE: 16384
+## Error:    Cannot allocate memory
+##
+## Check the CQE attribute.
+## --------------------------------------------------------------------------
+## --------------------------------------------------------------------------
+## Open MPI has detected that there are UD-capable Verbs devices on your
+## system, but none of them were able to be setup properly.  This may
+## indicate a problem on this system.
+##
+## You job will continue, but Open MPI will ignore the "ud" oob component
+## in this run.
+
+## /gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin/mpirun \
+## --mca oob tcp \
+## --mca btl self,vader,openib \
+## -x PATH \
+## -x LD_LIBRARY_PATH \
+## -rf simpleMPI-4x2x1.rf \
+## -np 8 \
+## bash simpleMPI-wrapper.sh
+####
+## At least one pair of MPI processes are unable to reach each other for
+## MPI communications.  This means that no Open MPI device has indicated
+## that it can be used to communicate between these processes.  This is
+## an error; Open MPI requires that all MPI processes be able to reach
+## each other.  This error can sometimes be the result of forgetting to
+## specify the "self" BTL.
+##
+##   Process 1 ([[2188,1],0]) is on host: p10a100
+##   Process 2 ([[2188,1],1]) is on host: p10a120
+##   BTLs attempted: vader self
+##
+## Your MPI job is now going to abort; sorry.
+## --------------------------------------------------------------------------
+## [p10a100:67933] *** An error occurred in MPI_Scatter
+## [p10a100:67933] *** reported by process [143392769,0]
+## [p10a100:67933] *** on communicator MPI_COMM_WORLD
+## [p10a100:67933] *** MPI_ERR_INTERN: internal error
+## [p10a100:67933] *** MPI_ERRORS_ARE_FATAL (processes in this communicator will now abort,
+## [p10a100:67933] ***    and potentially your MPI job)
+
+## /gpfs/gpfs_gl4_16mb/boc/ompi/2.0.3/bin/mpirun \
+## --mca oob tcp \
+## --mca btl self,vader,openib \
+## --mca btl_openib_if_exclude "mlx5_1:1" \
+## -x PATH \
+## -x LD_LIBRARY_PATH \
+## -rf simpleMPI-4x2x1.rf \
+## -np 8 \
+## bash simpleMPI-wrapper.sh
+###
+## --------------------------------------------------------------------------
+## WARNING: One or more nonexistent OpenFabrics devices/ports were
+## specified:
+##
+##   Host:                 p10a114
+##   MCA parameter:        mca_btl_if_exclude
+##   Nonexistent entities: mlx5_1:1
+##
+## These entities will be ignored.  You can disable this warning by
+## setting the btl_openib_warn_nonexistent_if MCA parameter to 0.
+## --------------------------------------------------------------------------
+## Running on 8 nodes
+## --------------------------------------------------------------------------
+## At least one pair of MPI processes are unable to reach each other for
+## MPI communications.  This means that no Open MPI device has indicated
+## that it can be used to communicate between these processes.  This is
+## an error; Open MPI requires that all MPI processes be able to reach
+## each other.  This error can sometimes be the result of forgetting to
+## specify the "self" BTL.
+##
+##   Process 1 ([[49358,1],0]) is on host: p10a114
+##   Process 2 ([[49358,1],1]) is on host: p10a118
+##   BTLs attempted: vader self
+##
+## Your MPI job is now going to abort; sorry.
+## --------------------------------------------------------------------------
+## [p10a114:9073] *** An error occurred in MPI_Scatter
+## [p10a114:9073] *** reported by process [3234725889,0]
+## [p10a114:9073] *** on communicator MPI_COMM_WORLD
+## [p10a114:9073] *** MPI_ERR_INTERN: internal error
+## [p10a114:9073] *** MPI_ERRORS_ARE_FATAL (processes in this communicator will now abort,
+## [p10a114:9073] ***    and potentially your MPI job)
+## [p10a114:09047] 3 more processes have sent help message help-mpi-btl-openib.txt / nonexistent port
+## [p10a114:09047] Set MCA parameter "orte_base_help_aggregate" to 0 to see all help / error messages

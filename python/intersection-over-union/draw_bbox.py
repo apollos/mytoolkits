@@ -30,33 +30,33 @@ def get_file_list(in_pic, in_label, gt_label):
         print("%s does not exists" % (gt_label))
         return []
     if isfile(in_pic):
-        if(in_pic.endswith(".jpg") or in_pic.endswith(".png")):
+        if(in_pic.lower().endswith(".jpg") or in_pic.lower().endswith(".png")):
             file_group = [in_pic]
-            if isfile(in_label) and in_label.endswith(".xml"):
+            if isfile(in_label) and in_label.lower().endswith(".xml"):
                 file_group.append(in_label)
             else:
-                print("%s is not correct" % (in_label))
+                print("AA: %s is not correct" % (in_label))
                 return []
 
             if (not gt_label is None):
-                if (isfile(gt_label)) and gt_label.endswith(".xml"):
+                if (isfile(gt_label)) and gt_label.lower().endswith(".xml"):
                     file_group.append(gt_label)
                 else:
-                    print("%s is not correct" % (gt_label))
+                    print("FF: %s is not correct" % (gt_label))
                     return []
             filelist.append(file_group)
         else:
-            print("%s is not correct" % (in_pic))
+            print("DD: %s is not correct" % (in_pic))
             return []
     else: #folder
         for filename in listdir(in_pic): 
-            if(filename.endswith(".jpg") or filename.endswith(".png")):
+            if(filename.lower().endswith(".jpg") or filename.lower().endswith(".png")):
                 file_group = ["%s/%s" % (in_pic, filename)]
                 xmlfile = replace_patt.sub(".xml", filename)
                 if listdir(in_label) and exists("%s/%s" % (in_label, xmlfile)):
                     file_group.append("%s/%s" % (in_label, xmlfile))
                 else:
-                    print("%s/%s is not correct" % (in_label, xmlfile))
+                    print("BB: %s/%s is not correct" % (in_label, xmlfile))
                     #return []
                     continue
 
@@ -64,7 +64,7 @@ def get_file_list(in_pic, in_label, gt_label):
                     if (listdir(gt_label)) and exists("%s/%s" % (gt_label, xmlfile)):
                         file_group.append("%s/%s" % (gt_label, xmlfile))
                     else:
-                        print("%s is not correct" % (gt_label))
+                        print("CC: %s is not correct" % (gt_label))
                         return []
                 filelist.append(file_group)
     return filelist
@@ -106,8 +106,8 @@ def main(in_pic, in_label, gt_label=None, save=False):
         image = cv2.imread(file_group[0])
         xml = genXmlInfo(file_group[1])
         for obj in xml:
-	        # draw the ground-truth bounding box along with the predicted
-	        # bounding box
+            # draw the ground-truth bounding box along with the predicted
+            # bounding box
             #print obj
             #print obj[1][:2]
             if (obj[1][1] > 10):

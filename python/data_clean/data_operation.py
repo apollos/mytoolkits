@@ -32,6 +32,9 @@ def main():
     # Set up the pre-trained graph.
 
     dataclean_handle = dataclean.DataClean(file_ext=FLAGS.file_ext.split(","), header_flag=FLAGS.header)
+    if FLAGS.output_file is not None:
+        if not os.path.exists(FLAGS.output_file):
+            os.mkdir(FLAGS.output_file)
     object_column_names=[]
     if FLAGS.object_columns is not None:
         object_column_names = FLAGS.object_columns.split(",")
@@ -210,6 +213,7 @@ def main():
             for table_name in table_names:
                 full_path = dirname+"/"+"merge_"+table_name
                 dataclean_handle.save_datafile(table_list[table_name]["df"], full_path)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)

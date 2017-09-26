@@ -21,7 +21,7 @@ def copyfile(source_file, output_path, type_name, class_name):
 def write_list2file(fd, data_list, copy_flag, output_path, type_name, label_flag, label, class_path):
     for file_id in data_list:
         if label_flag:
-            fd.write(file_id+" %s \n" % label)
+            fd.write(file_id+" %d\n" % label)
         else:
             fd.write(file_id+"\n")
         if copy_flag:
