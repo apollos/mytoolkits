@@ -12,9 +12,8 @@ import collections
 logLevel = logging.DEBUG
 recordLogs = mylogs.myLogs(logLevel)
 KEYWORD_WINDOW = 2
-KEYWORD_NUM = 20
+KEYWORD_NUM = 10
 WORD_MIN_LEN = 1
-KEYPHRASE_NUM = 5
 PHRASE_MIN_LEN = 2
 SUMMARY_NUM = 3
 
@@ -40,7 +39,7 @@ def generate_keywords(file_list):
         tr4w.analyze(text=text, lower=True, window=KEYWORD_WINDOW)   # py2中text必须是utf8编码的str或者unicode对象，py3中必须是utf8编码的bytes或者str对象
         file_name = os.path.basename(file_name)
         keywords_dic[file_name]['keywords'] = tr4w.get_keywords(KEYWORD_NUM, word_min_len=WORD_MIN_LEN)
-        keywords_dic[file_name]['keyphrase'] = tr4w.get_keyphrases(keywords_num=KEYPHRASE_NUM, min_occur_num=PHRASE_MIN_LEN)
+        keywords_dic[file_name]['keyphrase'] = tr4w.get_keyphrases(keywords_num=KEYWORD_NUM, min_occur_num=PHRASE_MIN_LEN)
     return keywords_dic
 
 
@@ -79,9 +78,11 @@ def write_dict2file(output_path, keywords_dic, summary_dic):
 
 
 def show_dict(keywords_dic, summary_dic):
-    keys = keywords_dic.keys()
-    for key in keys:
-        if keywords_dic is not None:
+    if keywords_dic is None and summary_dic is None:
+        return
+    if keywords_dic is not None:
+        keys = keywords_dic.keys()
+        for key in keys:
             recordLogs.logger.info("keywords:")
             values = keywords_dic[key]['keywords']
             for value in values:
@@ -90,11 +91,34 @@ def show_dict(keywords_dic, summary_dic):
             values = keywords_dic[key]['keyphrase']
             for value in values:
                 recordLogs.logger.info("%s\n" % value)
-        if summary_dic is not None:
+    if summary_dic is not None:
+        keys = summary_dic.keys()
+        for key in keys:
             recordLogs.logger.info("summary:\n")
             values = summary_dic[key]['summary']
             for value in values:
                 recordLogs.logger.info("%f: %s\n" % (value.weight, value.sentence))
+
+
+def show_segmentation(file_list):
+    tr4w = TextRank4Keyword()
+
+    for file_name in file_list:
+        text = codecs.open(file_name, 'r', encoding='utf-8').read()
+        tr4w.analyze(text=text, lower=True, window=KEYWORD_WINDOW)   # py2中text必须是utf8编码的str或者unicode对象，py3中必须是utf8编码的bytes或者str对象
+        print("File: %s" % os.path.basename(file_name))
+        print('sentences:')
+        for s in tr4w.sentences:
+            print(s)                 # py2中是unicode类型。py3中是str类型。
+        print('words_no_filter')
+        for words in tr4w.words_no_filter:
+            print('/'.join(words))   # py2中是unicode类型。py3中是str类型。
+        print('words_no_stop_words')
+        for words in tr4w.words_no_stop_words:
+            print('/'.join(words))   # py2中是unicode类型。py3中是str类型。
+        print('words_all_filters')
+        for words in tr4w.words_all_filters:
+            print('/'.join(words))   # py2中是unicode类型。py3中是str类型。
 
 
 def main():
@@ -115,6 +139,9 @@ def main():
         write_dict2file(FLAGS.output_dir, keywords_dic, summary_dic)
     else:
         show_dict(keywords_dic, summary_dic)
+
+    if FLAGS.show_seg:
+        show_segmentation(input_file_list)
 
 
 if __name__ == '__main__':
@@ -142,6 +169,14 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--gen_summary',
+        action="store_true",
+        default=0,
+        help="""\
+      Generate summary of text\
+      """
+    )
+    parser.add_argument(
+        '--show_seg',
         action="store_true",
         default=0,
         help="""\

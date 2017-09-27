@@ -16,7 +16,7 @@ except:
     pass
     
 sentence_delimiters = ['?', '!', ';', '？', '！', '。', '；', '……', '…', '\n']
-allow_speech_tags = ['an', 'i', 'j', 'l', 'n', 'nr', 'nrfg', 'ns', 'nt', 'nz', 't', 'v', 'vd', 'vn', 'eng']
+allow_speech_tags = ['an', 'i', 'j', 'l', 'n', 'nr', 'nrfg', 'ns', 'nt', 'nz', 't', 'v', 'vd', 'vn', 'eng', 'x']
 
 PY2 = sys.version_info[0] == 2
 if not PY2:

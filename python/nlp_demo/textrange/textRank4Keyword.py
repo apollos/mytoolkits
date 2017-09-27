@@ -3,8 +3,8 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-import networkx as nx
-import numpy as np
+import os
+import codecs
 
 from . import util
 from .jiebaSeg import Segmentation
@@ -36,6 +36,7 @@ class TextRank4Keyword(object):
         self.words_no_filter = None     # 2维列表
         self.words_no_stop_words = None
         self.words_all_filters = None
+        self.customer_keywords = None   #It is used to store customer's key words
         
     def analyze(self, text, 
                 window = 2, 
@@ -66,7 +67,7 @@ class TextRank4Keyword(object):
         self.sentences = result.sentences
         self.words_no_filter = result.words_no_filter
         self.words_no_stop_words = result.words_no_stop_words
-        self.words_all_filters   = result.words_all_filters
+        self.words_all_filters = result.words_all_filters
 
         util.debug(20*'*')
         util.debug('self.sentences in TextRank4Keyword:\n', ' || '.join(self.sentences))
@@ -87,7 +88,7 @@ class TextRank4Keyword(object):
         else:
             _edge_source   = result['words_no_stop_words']
 
-        self.keywords = util.sort_words(_vertex_source, _edge_source, window = window, pagerank_config = pagerank_config)
+        self.keywords = util.sort_words(_vertex_source, _edge_source, window=window, pagerank_config=pagerank_config)
 
     def get_keywords(self, num = 6, word_min_len = 1):
         """获取最重要的num个长度大于等于word_min_len的关键词。
@@ -104,8 +105,15 @@ class TextRank4Keyword(object):
                 result.append(item)
                 count += 1
         return result
-    
-    def get_keyphrases(self, keywords_num = 12, min_occur_num = 2): 
+
+    def get_customer_keywords(self):
+        d = os.path.dirname(os.path.realpath(__file__))
+        d = os.path.join(d, "keywords.txt")
+        if os.path.exists(d):
+            customer_keywords_list = codecs.open(d, 'r', encoding='utf-8').readlines()
+            self.customer_keywords = [x.strip() for x in customer_keywords_list]
+
+    def get_keyphrases(self, keywords_num = 12, min_occur_num = 2):
         """获取关键短语。
         获取 keywords_num 个关键词构造的可能出现的短语，要求这个短语在原文本中至少出现的次数为min_occur_num。
 
@@ -114,21 +122,26 @@ class TextRank4Keyword(object):
         """
         keywords_set = set([ item.word for item in self.get_keywords(num=keywords_num, word_min_len = 1)])
         keyphrases = set()
+        self.get_customer_keywords()
         for sentence in self.words_no_filter:
             one = []
             for word in sentence:
                 if word in keywords_set:
                     one.append(word)
                 else:
-                    if len(one) >  1:
+                    if len(one) > 1:
                         keyphrases.add(''.join(one))
                     if len(one) == 0:
                         continue
                     else:
                         one = []
             # 兜底
-            if len(one) >  1:
+            if len(one) > 1:
                 keyphrases.add(''.join(one))
+        if self.customer_keywords is not None:
+            cust_keyphrases_list = self.customer_keywords
+        else:
+            cust_keyphrases_list = []
 
-        return [phrase for phrase in keyphrases 
-                if self.text.count(phrase) >= min_occur_num]
+        return [phrase for phrase in keyphrases if self.text.count(phrase) >= min_occur_num
+                or phrase in cust_keyphrases_list]
