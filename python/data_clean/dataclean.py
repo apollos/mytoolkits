@@ -7,6 +7,7 @@ import numpy as np
 
 default_file_ext = ["csv", "txt"]
 excel_file_ext = ['xls', 'xlsx']
+STATS_CLASS_NUM = 10
 
 
 class DataClean:
@@ -42,7 +43,7 @@ class DataClean:
                     file_df = pd.read_excel(filepath, dtype=dtype_dict)
         return file_df
 
-    def load_datafile(self, input_path, object_column_names):
+    def load_datafile(self, input_path, object_column_names, target_column_names):
         table_content = collections.defaultdict(dict)
         file_list = []
         if not os.path.exists(input_path):
@@ -64,7 +65,7 @@ class DataClean:
         self.recordLogs.logger.info("Total File number: %d" % len(file_list))
         for file_path in file_list:
             table_content[os.path.basename(file_path)]["df"] = self.read_content(file_path, object_column_names)
-        self.check_df_dict(table_content)
+        self.check_df_dict(table_content, target_column_names)
         return table_content
 
     def save_datafile(self, dataframe, output_path):
@@ -90,13 +91,14 @@ class DataClean:
         dataframe = pd.DataFrame([dict_data])
         self.save_datafile(dataframe, output_path)
 
-    def check_df(self, df_info):
+    def check_df(self, df_info, target_column_names):
         if df_info is None:
             self.recordLogs.logger.error("Empty or invalid data frame")
 
         '''check missing value'''
         missing_data_columns = []
         same_data_columns = []
+        target_columns_stat_info = collections.defaultdict(dict)
         df_info["heads"] = []
         if self.header_flag:
             column_heads = list(df_info["df"].columns.values)
@@ -112,6 +114,37 @@ class DataClean:
             column_values = set(df_info["df"][column_name])
             if len(column_values) == 1 or (missing_flag and len(column_values) == 2):
                 same_data_columns.append(column_name)
+            value_list = df_info["df"][column_name].tolist()
+            if column_name in target_column_names:
+                if df_info["df"][column_name].dtype == 'O':
+                    '''Calculate the ratio of each value in the whole list of the column'''
+                    for column_value in column_values:
+                        target_columns_stat_info[column_name][str(column_value)] = \
+                            float(value_list.count(column_value))/len(value_list)
+                elif df_info["df"][column_name].dtype == 'float64' or df_info["df"][column_name].dtype == 'int64':
+                    if len(column_values) <= STATS_CLASS_NUM:
+                        '''Calculate the ratio of each value in the whole list of the column'''
+                        ratio_count = 0.0
+                        for column_value in column_values:
+                            target_columns_stat_info[column_name][str(column_value)] = \
+                                float(value_list.count(column_value))/len(value_list)
+                            ratio_count += target_columns_stat_info[column_name][str(column_value)]
+                        if missing_flag:
+                            target_columns_stat_info[column_name]['nan'] = 1 - ratio_count
+                        else:
+                            if ratio_count != 1:
+                                self.recordLogs.logger.warning("Column [%s] Value Ratio is [%f]" % (column_name, ratio_count))
+                    else:
+                        self.recordLogs.logger.info("Value Number [%d] of Target Column [%s] exceed Threshold [%d], " +
+                                                    "Calculate Stats Info"
+                                                    % (len(column_values), column_name, STATS_CLASS_NUM))
+                        target_columns_stat_info[column_name]['min'] = np.min(value_list)
+                        target_columns_stat_info[column_name]['max'] = np.max(value_list)
+                        target_columns_stat_info[column_name]['mean'] = np.mean(value_list)
+                        target_columns_stat_info[column_name]['median'] = np.median(value_list)
+                else:
+                    self.recordLogs.logger.warn("Unknown type [%s] of Target Column [%s]"
+                                                % (df_info["df"][column_name].dtype, column_name))
             df_info["heads"].append((column_name, df_info["df"][column_name].dtype))
 
         '''fill missing data columns'''
@@ -120,6 +153,8 @@ class DataClean:
         df_info["sameData"] = same_data_columns
         '''fill shape'''
         df_info["shape"] = df_info["df"].shape
+        '''fill statistic information'''
+        df_info["stats"] = target_columns_stat_info
         '''fill different data type number'''
         dtypes_obj = df_info["df"].columns.to_series().groupby(df_info["df"].dtypes).groups
         dtype_keys = dtypes_obj.keys()
@@ -127,7 +162,7 @@ class DataClean:
         for key in dtype_keys:
             df_info["dtypes"].append((key, len(dtypes_obj[key])))
 
-    def check_df_dict(self, df_dict):
+    def check_df_dict(self, df_dict, target_column_names):
         if df_dict is None or len(df_dict.keys()) == 0:
             self.recordLogs.logger.error("Empty or invalid data frame Dict")
 
@@ -135,7 +170,7 @@ class DataClean:
             if df_dict[table_name]["df"].shape[0] == 0:
                 del df_dict[table_name]
                 continue
-            self.check_df(df_dict[table_name])
+            self.check_df(df_dict[table_name], target_column_names)
 
     def merge_rows_same_key(self, df_info, different_columns, key_column_name):
         if df_info is None:

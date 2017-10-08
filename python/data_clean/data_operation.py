@@ -12,7 +12,7 @@ logLevel = logging.DEBUG
 recordLogs = mylogs.myLogs(logLevel)
 
 
-def show_table_info(table_df):
+def show_table_info(table_df, target_columns):
     for dict_key in table_df.keys():
         if dict_key != "df" and table_df[dict_key] is not None and len(table_df[dict_key]) > 0:
             print("%s:" % dict_key)
@@ -38,12 +38,16 @@ def main():
     object_column_names=[]
     if FLAGS.object_columns is not None:
         object_column_names = FLAGS.object_columns.split(",")
-    table_list = dataclean_handle.load_datafile(FLAGS.input_files, object_column_names)
+    target_column_names = []
+    if FLAGS.target_columns is not None:
+        target_column_names = FLAGS.target_columns.split(",")
+
+    table_list = dataclean_handle.load_datafile(FLAGS.input_files, object_column_names, target_column_names)
     if FLAGS.action == 'show':
         keys = table_list.keys()
         for key in keys:
             print ("***********************Table %s Information:**************************" % key)
-            show_table_info(table_list[key])
+            show_table_info(table_list[key], FLAGS.target_columns)
     elif FLAGS.action == 'join':
         if FLAGS.join_key is None:
             recordLogs.logger.error("join key is not available")
