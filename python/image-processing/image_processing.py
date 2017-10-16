@@ -329,6 +329,101 @@ def random_noise(image_lists):
                 continue
 
 
+def morphological(image_lists, kernel_list):
+    image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                for kernel in kernel_list:
+                    # construct a rectangular kernel and apply a blackhat operation which
+                    # enables us to find dark regions on a light background
+                    if kernel == 'blackhat':
+                        # kernel size need be modified in future as input parameter
+                        rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (23, 5))
+                        gray = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, rect_kernel)
+                    elif kernel == 'tophat':
+                        # similarly, a tophat (also called a "whitehat") operation will enable
+                        # us to find light regions on a dark background
+                        # kernel size need be modified in future as input parameter
+                        rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (23, 5))
+                        gray = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, rect_kernel)
+                    elif kernel == 'dilation':
+                        # kernel size need be modified in future as input parameter
+                        rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+                        gray = cv2.dilate(gray, rect_kernel, iterations=1)
+                    else:
+                        recordLogs.logger.error("Unknown morphological kernel: %s" % kernel)
+                        return
+
+                output_file = os.path.join(output_path, "-".join(kernel_list)+"_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, gray)
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
+
+def cal_gradient(image_lists, kernel):
+    image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                if kernel == 'sobel':
+                    # compute gradients along the X and Y axis, respectively
+                    gX = cv2.Sobel(gray, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=3)
+                    gY = cv2.Sobel(gray, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=3)
+
+                    # the `gX` and `gY` images are now of the floating point data type,
+                    # so we need to take care to convert them back to an unsigned 8-bit
+                    # integer representation so other OpenCV functions can utilize them
+                    gX = cv2.convertScaleAbs(gX)
+                    gY = cv2.convertScaleAbs(gY)
+
+                    # combine the sobel X and Y representations into a single image
+                    gray = cv2.addWeighted(gX, 0.5, gY, 0.5, 0)
+                elif kernel == 'scharr':
+                    # compute gradients along the X and Y axis, respectively
+                    gX = cv2.Scharr(gray, ddepth=cv2.CV_64F, dx=1, dy=0)
+                    gY = cv2.Scharr(gray, ddepth=cv2.CV_64F, dx=0, dy=1)
+
+                    # the `gX` and `gY` images are now of the floating point data type,
+                    # so we need to take care to convert them back to an unsigned 8-bit
+                    # integer representation so other OpenCV functions can utilize them
+                    gX = cv2.convertScaleAbs(gX)
+                    gY = cv2.convertScaleAbs(gY)
+
+                    # combine the sobel X and Y representations into a single image
+                    gray = cv2.addWeighted(gX, 0.5, gY, 0.5, 0)
+                else:
+                    recordLogs.logger.error("Unknown morphological kernel: %s" % kernel)
+                    return
+
+                output_file = os.path.join(output_path, kernel+"_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, gray)
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
+
 def main():
 
     # Look at the folder structure, and create lists of all the images.
@@ -351,6 +446,10 @@ def main():
         random_rotation(image_lists)
     if FLAGS.random_noise > 0:
         random_noise(image_lists)
+    if FLAGS.morph is not None:
+        morphological(image_lists, FLAGS.morph)
+    if FLAGS.calGradient is not None:
+        cal_gradient(image_lists, FLAGS.calGradient)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -416,6 +515,23 @@ if __name__ == '__main__':
         default=0,
         help="""\
       A percentage determining how much to randomly add noise in the training image\
+      """
+    )
+    parser.add_argument(
+        '--morph',
+        type=str,
+        choices=['blackhat', 'tophat', 'dilation'],
+        action='append',
+        help="""\
+      Action for image morphological. Sequence follow the parameter sequence\
+      """
+    )
+    parser.add_argument(
+        '--calGradient',
+        type=str,
+        choices=['sobel', 'scharr'],
+        help="""\
+      Calculate gradient magnitude and orientation by different kernels\
       """
     )
     FLAGS, unparsed = parser.parse_known_args()
