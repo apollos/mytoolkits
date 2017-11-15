@@ -59,20 +59,22 @@ def create_image_lists(image_dir):
         return None
     result = collections.defaultdict(dict)
     sub_dirs = [x[0] for x in os.walk(image_dir)]
-    is_root_dir = True
+
     for sub_dir in sub_dirs:
-        if is_root_dir:
-            is_root_dir = False
-            continue
         extensions = ['jpg', 'jpeg', 'JPG', 'JPEG']
         file_list = []
         dir_name = os.path.basename(sub_dir)
-        if dir_name == image_dir:
-            continue
+        is_root_dir = False
+        if sub_dir == image_dir:
+            is_root_dir = True
+
         recordLogs.logger.info("Looking for images in '" + dir_name + "'")
         for extension in extensions:
             '''only support search one level directory'''
-            file_glob = os.path.join(image_dir, dir_name, '*.' + extension)
+            if is_root_dir:
+                file_glob = os.path.join(image_dir, '*.' + extension)
+            else:
+                file_glob = os.path.join(image_dir, dir_name, '*.' + extension)
             file_list.extend(glob.glob(file_glob))
         if not file_list:
             recordLogs.logger.warning('No files found')
@@ -88,10 +90,13 @@ def create_image_lists(image_dir):
         for file_name in file_list:
             base_name = os.path.basename(file_name)
             training_images.append(base_name)
+        if is_root_dir:
+            dir_name = ''
         result[label_name] = {
             'dir': dir_name,
             'training': training_images
         }
+
     return result
 
 
@@ -424,6 +429,30 @@ def cal_gradient(image_lists, kernel):
                 continue
 
 
+def transfer_gray(image_lists):
+    image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                #print ("%d %d %d --- %d %d %d" % (img[0][0][0],img[0][0][1],img[0][0][2],img[70][70][0],img[70][70][1],img[70][70][2]))
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                output_file = os.path.join(output_path, "gray"+"_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, gray)
+                #print ("%d --- %d" % (gray[0][0],gray[70][70]))
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
+
 def main():
 
     # Look at the folder structure, and create lists of all the images.
@@ -450,6 +479,8 @@ def main():
         morphological(image_lists, FLAGS.morph)
     if FLAGS.calGradient is not None:
         cal_gradient(image_lists, FLAGS.calGradient)
+    if FLAGS.to_gray is not None and FLAGS.to_gray:
+        transfer_gray(image_lists)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -532,6 +563,13 @@ if __name__ == '__main__':
         choices=['sobel', 'scharr'],
         help="""\
       Calculate gradient magnitude and orientation by different kernels\
+      """
+    )
+    parser.add_argument(
+        '--to_gray',
+        action='store_true',
+        help="""\
+      Transform image to gray\
       """
     )
     FLAGS, unparsed = parser.parse_known_args()

@@ -9,7 +9,7 @@ layer {
   }
   transform_param {
     mirror: true
-    crop_size: 224
+    crop_size: 299
     mean_file: "/home/yu/workspace/Data/flower_photos/mean.binaryproto"
   }
   data_param {
@@ -28,7 +28,7 @@ layer {
   }
   transform_param {
     mirror: false
-    crop_size: 224
+    crop_size: 299
     mean_file: "/home/yu/workspace/Data/flower_photos/mean.binaryproto"
   }
   data_param {
