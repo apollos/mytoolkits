@@ -426,7 +426,8 @@ def inception_v3(inputs,
                  spatial_squeeze=True,
                  reuse=None,
                  create_aux_logits=True,
-                 scope='InceptionV3'):
+                 scope='InceptionV3',
+                 final_endpoint=''):
   """Inception model from http://arxiv.org/abs/1512.00567.
 
   "Rethinking the Inception Architecture for Computer Vision"
@@ -480,8 +481,9 @@ def inception_v3(inputs,
                         is_training=is_training):
       net, end_points = inception_v3_base(
           inputs, scope=scope, min_depth=min_depth,
-          depth_multiplier=depth_multiplier)
-
+          depth_multiplier=depth_multiplier, final_endpoint=final_endpoint)
+      if final_endpoint in end_points:
+          return net, end_points
       # Auxiliary Head logits
       if create_aux_logits:
         with slim.arg_scope([slim.conv2d, slim.max_pool2d, slim.avg_pool2d],
@@ -508,6 +510,8 @@ def inception_v3(inputs,
             if spatial_squeeze:
               aux_logits = tf.squeeze(aux_logits, [1, 2], name='SpatialSqueeze')
             end_points['AuxLogits'] = aux_logits
+            if final_endpoint == 'AuxLogits':
+                return aux_logits, end_points
 
       # Final pooling and prediction
       with tf.variable_scope('Logits'):
@@ -517,6 +521,8 @@ def inception_v3(inputs,
         # 1 x 1 x 2048
         net = slim.dropout(net, keep_prob=dropout_keep_prob, scope='Dropout_1b')
         end_points['PreLogits'] = net
+        if final_endpoint == 'PreLogits':
+            return net, end_points
         # 2048
         logits = slim.conv2d(net, num_classes, [1, 1], activation_fn=None,
                              normalizer_fn=None, scope='Conv2d_1c_1x1')
@@ -524,6 +530,8 @@ def inception_v3(inputs,
           logits = tf.squeeze(logits, [1, 2], name='SpatialSqueeze')
         # 1000
       end_points['Logits'] = logits
+      if final_endpoint == 'Logits':
+          return net, end_points
       end_points['Predictions'] = prediction_fn(logits, scope='Predictions')
   return logits, end_points
 inception_v3.default_image_size = 299

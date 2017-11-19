@@ -24,6 +24,8 @@ from . import cifarnet_preprocessing
 from . import inception_preprocessing
 from . import lenet_preprocessing
 from . import vgg_preprocessing
+from . import ocr_prepocessing
+from . import naton_preprocessing
 
 slim = tf.contrib.slim
 
@@ -74,7 +76,9 @@ def get_preprocessing(name, is_training=False):
       'vgg_a': vgg_preprocessing,
       'vgg_16': vgg_preprocessing,
       'vgg_19': vgg_preprocessing,
-      'lightenednet':lightenednet_preprocessing
+      'lightenednet':lightenednet_preprocessing,
+      'naton': naton_preprocessing,
+      'ocr': ocr_prepocessing
   }
 
   if name not in preprocessing_fn_map:
@@ -82,6 +86,6 @@ def get_preprocessing(name, is_training=False):
 
   def preprocessing_fn(image, output_height, output_width, **kwargs):
     return preprocessing_fn_map[name].preprocess_image(
-        image, output_height, output_width, is_training=is_training, **kwargs)
+        image, output_height, output_width, **kwargs)
 
   return preprocessing_fn

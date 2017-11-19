@@ -303,6 +303,7 @@ def train_step(data_batch_val, label_batch_val, session, is_training_placeholder
         sample_idx = triplet[start_idx:end_idx]
         duration = time.time() - start_time
         print("    [%d/%d] Time %3f seconds"%(isub_batch,num_sub_batches, duration))
+
         session.run(train_op, feed_dict={data_placeholder: data_batch_val[sample_idx], is_training_placeholder: True})
         for var in tf.get_collection("monitored variables"):
             val = session.run(var)
