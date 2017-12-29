@@ -7,11 +7,12 @@ import os
 import glob
 import random
 import re
-
 import cv2
 import mylogs
 import collections
 import numpy as np
+import imutils
+from pyimagesearch.shapedetector import ShapeDetector
 
 FLAGS = None
 
@@ -455,7 +456,7 @@ def transfer_gray(image_lists):
                 continue
 
 
-def auto_split(image_lists, action):
+def auto_split(image_lists, shape):
     image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
     keys = image_list_dict.keys()
     if FLAGS.output_dir is None:
@@ -469,23 +470,42 @@ def auto_split(image_lists, action):
         for image_file in image_list_dict[key]:
             try:
                 img = cv2.imread(image_file)
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                if action == 'sobel':
-                    # compute gradients along the X and Y axis, respectively
-                    gX = cv2.Sobel(gray, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=3)
-                    gY = cv2.Sobel(gray, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=3)
+                #output_file = os.path.join(output_path, shape+"_" + os.path.basename(image_file))
+                resized = imutils.resize(img, width=300)#we may not need it, let's try big pic
+                ratio = img.shape[0] / float(resized.shape[0])
+                gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+                blurred = cv2.GaussianBlur(gray, (5, 5), 0) #The kernel may be changed according to real image
+                tmp = np.ravel(blurred)
+                recordLogs.logger.info("Image Info: {} {} {} {}".format(np.max(tmp), np.min(tmp), np.mean(tmp), np.median(tmp)))
+                thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)[1]
+                cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                cnts = cnts[0] if imutils.is_cv2() else cnts[1]
+                sd = ShapeDetector()
+                # loop over the contours
+                for c in cnts:
+                    # compute the center of the contour, then detect the name of the
+                    # shape using only the contour
+                    '''
+                    if (cv2.contourArea(c) < 90000) or (cv2.contourArea(c) > 110000):
+                        continue
+                    '''
 
-                    # the `gX` and `gY` images are now of the floating point data type,
-                    # so we need to take care to convert them back to an unsigned 8-bit
-                    # integer representation so other OpenCV functions can utilize them
-                    gX = cv2.convertScaleAbs(gX)
-                    gY = cv2.convertScaleAbs(gY)
+                    M = cv2.moments(c)
+                    cX = int((M["m10"] / M["m00"]) * ratio)
+                    cY = int((M["m01"] / M["m00"]) * ratio)
+                    shape = sd.detect(c)
+                    if shape is not "rectangle" and shape is not "square":
+                        continue
 
-                    # combine the sobel X and Y representations into a single image
-                    gray = cv2.addWeighted(gX, 0.5, gY, 0.5, 0)
-
-                output_file = os.path.join(output_path, action+"_" + os.path.basename(image_file))
-                cv2.imwrite(output_file, gray)
+                    # multiply the contour (x, y)-coordinates by the resize ratio,
+                    # then draw the contours and the name of the shape on the image
+                    c = c.astype("float")
+                    c *= ratio
+                    c = c.astype("int")
+                    # cv2.drawContours(image, [c], -1, (0, 255, 0), 2)
+                    x, y, w, h = cv2.boundingRect(c)
+                    image = cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                    #cv2.putText(image, shape, (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             except cv2.error:
                 recordLogs.logger.info("OpenCV error({0})".format(image_file))
                 continue
@@ -614,9 +634,9 @@ if __name__ == '__main__':
     parser.add_argument(
         '--autoSplit',
         type=str,
-        choices=['rectangle', 'triangle', 'cycle', 'mixed'],
+        choices=['rectangle', 'triangle'],
         help="""\
-          Calculate gradient magnitude and orientation by different kernels\
+          Automatically detect and crop the specified shape\
           """
     )
     FLAGS, unparsed = parser.parse_known_args()
