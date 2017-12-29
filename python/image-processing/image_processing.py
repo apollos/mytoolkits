@@ -17,6 +17,7 @@ FLAGS = None
 
 recordLogs = mylogs.myLogs()
 
+
 class ImageProcessConf:
     def __init__(self):
         self.MAX_NUM_IMAGES_PER_CLASS = 2 ** 27 - 1  # ~134M
@@ -36,6 +37,7 @@ class ImageProcessConf:
         self.BRIGHTNESS_BIAS_STEP = 1
         self.ANGLE_MIN = 1
         self.ANGLE_MAX = 359
+
 
 imageconf = ImageProcessConf()
 
@@ -453,6 +455,41 @@ def transfer_gray(image_lists):
                 continue
 
 
+def auto_split(image_lists, action):
+    image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                if action == 'sobel':
+                    # compute gradients along the X and Y axis, respectively
+                    gX = cv2.Sobel(gray, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=3)
+                    gY = cv2.Sobel(gray, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=3)
+
+                    # the `gX` and `gY` images are now of the floating point data type,
+                    # so we need to take care to convert them back to an unsigned 8-bit
+                    # integer representation so other OpenCV functions can utilize them
+                    gX = cv2.convertScaleAbs(gX)
+                    gY = cv2.convertScaleAbs(gY)
+
+                    # combine the sobel X and Y representations into a single image
+                    gray = cv2.addWeighted(gX, 0.5, gY, 0.5, 0)
+
+                output_file = os.path.join(output_path, action+"_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, gray)
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
 def main():
 
     # Look at the folder structure, and create lists of all the images.
@@ -481,6 +518,8 @@ def main():
         cal_gradient(image_lists, FLAGS.calGradient)
     if FLAGS.to_gray is not None and FLAGS.to_gray:
         transfer_gray(image_lists)
+    if FLAGS.autoSplit is not None:
+        auto_split(image_lists, FLAGS.autoSplit)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -571,6 +610,14 @@ if __name__ == '__main__':
         help="""\
       Transform image to gray\
       """
+    )
+    parser.add_argument(
+        '--autoSplit',
+        type=str,
+        choices=['rectangle', 'triangle', 'cycle', 'mixed'],
+        help="""\
+          Calculate gradient magnitude and orientation by different kernels\
+          """
     )
     FLAGS, unparsed = parser.parse_known_args()
     main()
