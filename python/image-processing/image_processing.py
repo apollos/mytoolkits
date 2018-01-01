@@ -13,6 +13,8 @@ import collections
 import numpy as np
 import imutils
 from pyimagesearch.shapedetector import ShapeDetector
+from pyimagesearch.removeborder import RemoveBorder
+from pyimagesearch.getcontours import ContoursDetect
 
 FLAGS = None
 
@@ -465,6 +467,7 @@ def transfer_gray(image_lists):
 
 def auto_split(image_lists, shape):
     image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    cv2.namedWindow('Image', cv2.WINDOW_NORMAL)
     keys = image_list_dict.keys()
     if FLAGS.output_dir is None:
         output_path_root = FLAGS.image_dir
@@ -478,49 +481,92 @@ def auto_split(image_lists, shape):
             try:
                 img = cv2.imread(image_file)
                 #output_file = os.path.join(output_path, shape+"_" + os.path.basename(image_file))
-                resized = imutils.resize(img, width=300)#we may not need it, let's try big pic
-                ratio = image.shape[0] / float(resized.shape[0])
-                gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-                blurred = cv2.GaussianBlur(gray, (5, 5), 0) #The kernel may be changed according to real image
-                tmp = np.ravel(blurred)
-                recordLogs.logger.info("Image Info: {} {} {} {}".format(np.max(tmp), np.min(tmp), np.mean(tmp), np.median(tmp)))
-                thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)[1]
-                cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                #resized = imutils.resize(img, width=300)#we may not need it, let's try big pic
+                resized = img
+                ratio = img.shape[0] / float(resized.shape[0])
+
+                cnts = cv2.findContours(resized.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 cnts = cnts[0] if imutils.is_cv2() else cnts[1]
                 sd = ShapeDetector()
                 # loop over the contours
+                print(len(cnts))
                 for c in cnts:
                     # compute the center of the contour, then detect the name of the
                     # shape using only the contour
+                    print(cv2.contourArea(c))
                     '''
-                    if (cv2.contourArea(c) < 90000) or (cv2.contourArea(c) > 110000):
+                    if cv2.contourArea(c) < 1000 or cv2.contourArea(c) > 410000:
                         continue
                     '''
-
+                    '''
                     M = cv2.moments(c)
                     cX = int((M["m10"] / M["m00"]) * ratio)
                     cY = int((M["m01"] / M["m00"]) * ratio)
+
                     shape_predict = sd.detect(c)
                     if shape_predict is not shape:
                         continue
+                    '''
 
                     # multiply the contour (x, y)-coordinates by the resize ratio,
                     # then draw the contours and the name of the shape on the image
+                    '''
                     c = c.astype("float")
                     c *= ratio
                     c = c.astype("int")
+                    '''
                     # cv2.drawContours(image, [c], -1, (0, 255, 0), 2)
                     x, y, w, h = cv2.boundingRect(c)
-                    image = cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                    cv2.putText(image, shape, (cX, cY), cv2.FONT_HERSHEY_SIMPLEX,
-                                0.5, (255, 255, 255), 2)
-
-                    # show the output image
-                    cv2.imshow("Image", image)
+                    img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                    #cv2.putText(img, shape, (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                    resized = imutils.resize(img, width=1500)
+                    cv2.imshow("Image", resized)
                     cv2.waitKey(0)
             except cv2.error:
                 recordLogs.logger.info("OpenCV error({0})".format(image_file))
                 continue
+
+
+def remove_black_border(image_lists):
+    image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, 'removeblackborder', image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                if np.shape(img)[1] > 800:
+                    resized = imutils.resize(img, width=800)
+                else:
+                    resized = img
+                ratio = img.shape[0] / float(resized.shape[0])
+                rm_boarder = RemoveBorder()
+                x, y, w, h = rm_boarder.remove_border(resized)
+                # multiply the contour (x, y)-coordinates by the resize ratio,
+                # then draw the contours and the name of the shape on the image
+                c = c.astype("float")
+                c *= ratio
+                c = c.astype("int")
+                cv2.drawContours(img, [c], -1, (0, 255, 0), 2)
+                # Crop with the largest rectangle
+                crop = img[y:y + h, x:x + w]
+
+                cv2.imshow("Image", resized)
+                cv2.waitKey(0)
+                continue
+                output_file = os.path.join(output_path, "black_border"+"_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, gray)
+                #print ("%d --- %d" % (gray[0][0],gray[70][70]))
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
 
 def main():
 
@@ -548,10 +594,13 @@ def main():
         morphological(image_lists, FLAGS.morph)
     if FLAGS.calGradient is not None:
         cal_gradient(image_lists, FLAGS.calGradient)
-    if FLAGS.to_gray is not None and FLAGS.to_gray:
+    if FLAGS.toGray is not None and FLAGS.toGray:
         transfer_gray(image_lists)
     if FLAGS.autoSplit is not None:
         auto_split(image_lists, FLAGS.autoSplit)
+    if FLAGS.removeBlackBorder is not None and FLAGS.removeBlackBorder:
+        remove_black_border(image_lists)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -565,7 +614,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--output_dir',
         type=str,
-        default='',
+        default='output',
         help='Path to folders of distortion.'
     )
     parser.add_argument(
@@ -637,7 +686,7 @@ if __name__ == '__main__':
       """
     )
     parser.add_argument(
-        '--to_gray',
+        '--toGray',
         action='store_true',
         help="""\
       Transform image to gray\
@@ -649,6 +698,13 @@ if __name__ == '__main__':
         choices=['rectangle', 'triangle'],
         help="""\
           Automatically detect and crop the specified shape\
+          """
+    )
+    parser.add_argument(
+        '--removeBlackBorder',
+        action='store_true',
+        help="""\
+          Remove the blackborder from image\
           """
     )
     FLAGS, unparsed = parser.parse_known_args()
