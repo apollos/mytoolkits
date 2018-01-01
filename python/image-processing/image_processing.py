@@ -39,6 +39,7 @@ class ImageProcessConf:
         self.ANGLE_MIN = 1
         self.ANGLE_MAX = 359
 
+
 imageconf = ImageProcessConf()
 
 
@@ -60,10 +61,17 @@ def create_image_lists(image_dir):
         recordLogs.logger.error("Image directory '" + image_dir + "' not found.")
         return None
     result = collections.defaultdict(dict)
+    if os.path.isfile(image_dir):
+        result['single_file'] = {
+            'dir': '',
+            'training': image_dir
+        }
+        return result
+
     sub_dirs = [x[0] for x in os.walk(image_dir)]
 
     for sub_dir in sub_dirs:
-        extensions = ['jpg', 'jpeg', 'JPG', 'JPEG']
+        extensions = ['jpg', 'jpeg', 'JPG', 'JPEG', 'png', 'PNG', 'tiff']
         file_list = []
         dir_name = os.path.basename(sub_dir)
         is_root_dir = False
@@ -85,8 +93,8 @@ def create_image_lists(image_dir):
             recordLogs.logger.warning('Folder has less than %d images, which may cause issues.' %
                                       imageconf.MIN_NUM_IMAGES_PER_CLASS)
         elif len(file_list) > imageconf.MAX_NUM_IMAGES_PER_CLASS:
-            recordLogs.logger.warning('Folder {0} has more than {1} images. Some images will '
-                  'never be selected.'.format(dir_name, imageconf.MAX_NUM_IMAGES_PER_CLASS))
+            recordLogs.logger.warning('Folder {0} has more than {1} images. Some images will \
+            never be selected.'.format(dir_name, imageconf.MAX_NUM_IMAGES_PER_CLASS))
         label_name = re.sub(r'[^a-z0-9]+', ' ', dir_name.lower())
         training_images = []
         for file_name in file_list:
@@ -492,8 +500,8 @@ def auto_split(image_lists, shape):
                     M = cv2.moments(c)
                     cX = int((M["m10"] / M["m00"]) * ratio)
                     cY = int((M["m01"] / M["m00"]) * ratio)
-                    shape = sd.detect(c)
-                    if shape is not "rectangle" and shape is not "square":
+                    shape_predict = sd.detect(c)
+                    if shape_predict is not shape:
                         continue
 
                     # multiply the contour (x, y)-coordinates by the resize ratio,
