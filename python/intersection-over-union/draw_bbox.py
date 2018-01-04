@@ -85,7 +85,7 @@ def genXmlInfo(xmlfile):
                 item = [cls, b]
                 items.append(item)
         except Exception:
-            print "Miss important key in file %s" % (xmlfile)
+            print ("Miss important key in file %s" % (xmlfile))
             continue
 
     return items

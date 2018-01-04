@@ -33,9 +33,9 @@ class ImageProcessConf:
         self.MIN_SCALE_THRESHOLD = 67
         self.MAX_SCALE_THRESHOLD = 199
         self.BRIGHTNESS_A_MIN = 10
-        self.BRIGHTNESS_A_MAX = 30
+        self.BRIGHTNESS_A_MAX = 15
         self.BRIGHTNESS_BIAS_MIN = 0
-        self.BRIGHTNESS_BIAS_MAX = 100
+        self.BRIGHTNESS_BIAS_MAX = 60
         self.BRIGHTNESS_A_STEP = 1
         self.BRIGHTNESS_BIAS_STEP = 1
         self.ANGLE_MIN = 1
@@ -66,7 +66,7 @@ def create_image_lists(image_dir):
     if os.path.isfile(image_dir):
         result['single_file'] = {
             'dir': '',
-            'training': image_dir
+            'training': [os.path.basename(image_dir)]
         }
         return result
 
@@ -160,13 +160,15 @@ def get_shuffl_image_list(image_lists, ratio, seed, root):
     if ratio > 1:
         ratio = 1
     image_files = {}
-
+    real_path = root
+    if os.path.isfile(root):
+        real_path = os.path.dirname(root)
     for key in keys:
         random.shuffle(image_lists[key]['training'])
         tmp_img_list = image_lists[key]['training']
         flip_list = []
         for image_file in tmp_img_list[:int(len(tmp_img_list)*ratio)]:
-            flip_list.append(os.path.join(root, image_lists[key]['dir'], image_file))
+            flip_list.append(os.path.join(real_path, image_lists[key]['dir'], image_file))
         image_files[key] = flip_list
     return image_files
 
@@ -467,7 +469,6 @@ def transfer_gray(image_lists):
 
 def auto_split(image_lists, shape):
     image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
-    cv2.namedWindow('Image', cv2.WINDOW_NORMAL)
     keys = image_list_dict.keys()
     if FLAGS.output_dir is None:
         output_path_root = FLAGS.image_dir
@@ -480,13 +481,9 @@ def auto_split(image_lists, shape):
         for image_file in image_list_dict[key]:
             try:
                 img = cv2.imread(image_file)
-                #output_file = os.path.join(output_path, shape+"_" + os.path.basename(image_file))
-                #resized = imutils.resize(img, width=300)#we may not need it, let's try big pic
-                resized = img
-                ratio = img.shape[0] / float(resized.shape[0])
-
-                cnts = cv2.findContours(resized.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                cnts = cnts[0] if imutils.is_cv2() else cnts[1]
+                contour = ContoursDetect()
+                contour.get_contours(img, shape)
+                """
                 sd = ShapeDetector()
                 # loop over the contours
                 print(len(cnts))
@@ -517,11 +514,8 @@ def auto_split(image_lists, shape):
                     '''
                     # cv2.drawContours(image, [c], -1, (0, 255, 0), 2)
                     x, y, w, h = cv2.boundingRect(c)
-                    img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                    #cv2.putText(img, shape, (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-                    resized = imutils.resize(img, width=1500)
-                    cv2.imshow("Image", resized)
-                    cv2.waitKey(0)
+                """
+
             except cv2.error:
                 recordLogs.logger.info("OpenCV error({0})".format(image_file))
                 continue
@@ -541,28 +535,11 @@ def remove_black_border(image_lists):
         for image_file in image_list_dict[key]:
             try:
                 img = cv2.imread(image_file)
-                if np.shape(img)[1] > 800:
-                    resized = imutils.resize(img, width=800)
-                else:
-                    resized = img
-                ratio = img.shape[0] / float(resized.shape[0])
                 rm_boarder = RemoveBorder()
-                x, y, w, h = rm_boarder.remove_border(resized)
-                # multiply the contour (x, y)-coordinates by the resize ratio,
-                # then draw the contours and the name of the shape on the image
-                c = c.astype("float")
-                c *= ratio
-                c = c.astype("int")
-                cv2.drawContours(img, [c], -1, (0, 255, 0), 2)
-                # Crop with the largest rectangle
-                crop = img[y:y + h, x:x + w]
-
-                cv2.imshow("Image", resized)
-                cv2.waitKey(0)
-                continue
-                output_file = os.path.join(output_path, "black_border"+"_" + os.path.basename(image_file))
-                cv2.imwrite(output_file, gray)
-                #print ("%d --- %d" % (gray[0][0],gray[70][70]))
+                xmin, ymin, xmax, ymax = rm_boarder.remove_border(img, FLAGS.borderMargin)
+                crop_img = img[ymin:ymax, xmin:xmax]
+                output_file = os.path.join(output_path, "remove_border"+"_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, crop_img)
             except cv2.error:
                 recordLogs.logger.info("OpenCV error({0})".format(image_file))
                 continue
@@ -572,6 +549,8 @@ def main():
 
     # Look at the folder structure, and create lists of all the images.
     image_lists = create_image_lists(FLAGS.image_dir)
+    if image_lists is None:
+        return -1
     class_count = len(image_lists.keys())
     if class_count == 0:
         recordLogs.logger.info('No valid folders of images found at ' + FLAGS.image_dir)
@@ -705,6 +684,14 @@ if __name__ == '__main__':
         action='store_true',
         help="""\
           Remove the blackborder from image\
+          """
+    )
+    parser.add_argument(
+        '--borderMargin',
+        type=int,
+        default=0,
+        help="""\
+          Leave margin while remove border\
           """
     )
     FLAGS, unparsed = parser.parse_known_args()
