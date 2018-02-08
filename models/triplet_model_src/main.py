@@ -67,7 +67,7 @@ def get_restore_fixed_var_list():
     fixed_parameters_names = FLAGS.fixed_parameters_names
     restore_parameters_names = FLAGS.restore_parameters_names
 
-    if fixed_parameters_names != None:
+    if fixed_parameters_names is not None:
         try:
             with open(fixed_parameters_names) as file:
                 param = file.readline()

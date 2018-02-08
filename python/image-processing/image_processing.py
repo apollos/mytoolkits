@@ -40,6 +40,7 @@ class ImageProcessConf:
         self.BRIGHTNESS_BIAS_STEP = 1
         self.ANGLE_MIN = 1
         self.ANGLE_MAX = 359
+        cv2.CAP
 
 
 imageconf = ImageProcessConf()
