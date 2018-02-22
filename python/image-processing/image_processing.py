@@ -7,15 +7,19 @@ import os
 import glob
 import random
 import re
-
 import cv2
 import mylogs
 import collections
 import numpy as np
+import imutils
+from pyimagesearch.shapedetector import ShapeDetector
+from pyimagesearch.removeborder import RemoveBorder
+from pyimagesearch.getcontours import ContoursDetect
 
 FLAGS = None
 
 recordLogs = mylogs.myLogs()
+
 
 class ImageProcessConf:
     def __init__(self):
@@ -29,13 +33,15 @@ class ImageProcessConf:
         self.MIN_SCALE_THRESHOLD = 67
         self.MAX_SCALE_THRESHOLD = 199
         self.BRIGHTNESS_A_MIN = 10
-        self.BRIGHTNESS_A_MAX = 30
+        self.BRIGHTNESS_A_MAX = 15
         self.BRIGHTNESS_BIAS_MIN = 0
-        self.BRIGHTNESS_BIAS_MAX = 100
+        self.BRIGHTNESS_BIAS_MAX = 60
         self.BRIGHTNESS_A_STEP = 1
         self.BRIGHTNESS_BIAS_STEP = 1
         self.ANGLE_MIN = 1
         self.ANGLE_MAX = 359
+        cv2.CAP
+
 
 imageconf = ImageProcessConf()
 
@@ -58,21 +64,30 @@ def create_image_lists(image_dir):
         recordLogs.logger.error("Image directory '" + image_dir + "' not found.")
         return None
     result = collections.defaultdict(dict)
+    if os.path.isfile(image_dir):
+        result['single_file'] = {
+            'dir': '',
+            'training': [os.path.basename(image_dir)]
+        }
+        return result
+
     sub_dirs = [x[0] for x in os.walk(image_dir)]
-    is_root_dir = True
+
     for sub_dir in sub_dirs:
-        if is_root_dir:
-            is_root_dir = False
-            continue
-        extensions = ['jpg', 'jpeg', 'JPG', 'JPEG']
+        extensions = ['jpg', 'jpeg', 'JPG', 'JPEG', 'png', 'PNG', 'tiff']
         file_list = []
         dir_name = os.path.basename(sub_dir)
-        if dir_name == image_dir:
-            continue
+        is_root_dir = False
+        if sub_dir == image_dir:
+            is_root_dir = True
+
         recordLogs.logger.info("Looking for images in '" + dir_name + "'")
         for extension in extensions:
             '''only support search one level directory'''
-            file_glob = os.path.join(image_dir, dir_name, '*.' + extension)
+            if is_root_dir:
+                file_glob = os.path.join(image_dir, '*.' + extension)
+            else:
+                file_glob = os.path.join(image_dir, dir_name, '*.' + extension)
             file_list.extend(glob.glob(file_glob))
         if not file_list:
             recordLogs.logger.warning('No files found')
@@ -81,17 +96,20 @@ def create_image_lists(image_dir):
             recordLogs.logger.warning('Folder has less than %d images, which may cause issues.' %
                                       imageconf.MIN_NUM_IMAGES_PER_CLASS)
         elif len(file_list) > imageconf.MAX_NUM_IMAGES_PER_CLASS:
-            recordLogs.logger.warning('Folder {0} has more than {1} images. Some images will '
-                  'never be selected.'.format(dir_name, imageconf.MAX_NUM_IMAGES_PER_CLASS))
+            recordLogs.logger.warning('Folder {0} has more than {1} images. Some images will \
+            never be selected.'.format(dir_name, imageconf.MAX_NUM_IMAGES_PER_CLASS))
         label_name = re.sub(r'[^a-z0-9]+', ' ', dir_name.lower())
         training_images = []
         for file_name in file_list:
             base_name = os.path.basename(file_name)
             training_images.append(base_name)
+        if is_root_dir:
+            dir_name = ''
         result[label_name] = {
             'dir': dir_name,
             'training': training_images
         }
+
     return result
 
 
@@ -143,13 +161,15 @@ def get_shuffl_image_list(image_lists, ratio, seed, root):
     if ratio > 1:
         ratio = 1
     image_files = {}
-
+    real_path = root
+    if os.path.isfile(root):
+        real_path = os.path.dirname(root)
     for key in keys:
         random.shuffle(image_lists[key]['training'])
         tmp_img_list = image_lists[key]['training']
         flip_list = []
         for image_file in tmp_img_list[:int(len(tmp_img_list)*ratio)]:
-            flip_list.append(os.path.join(root, image_lists[key]['dir'], image_file))
+            flip_list.append(os.path.join(real_path, image_lists[key]['dir'], image_file))
         image_files[key] = flip_list
     return image_files
 
@@ -424,10 +444,114 @@ def cal_gradient(image_lists, kernel):
                 continue
 
 
+def transfer_gray(image_lists):
+    image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                #print ("%d %d %d --- %d %d %d" % (img[0][0][0],img[0][0][1],img[0][0][2],img[70][70][0],img[70][70][1],img[70][70][2]))
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                output_file = os.path.join(output_path, "gray"+"_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, gray)
+                #print ("%d --- %d" % (gray[0][0],gray[70][70]))
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
+
+def auto_split(image_lists, shape):
+    image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                contour = ContoursDetect()
+                contour.get_contours(img, shape)
+                """
+                sd = ShapeDetector()
+                # loop over the contours
+                print(len(cnts))
+                for c in cnts:
+                    # compute the center of the contour, then detect the name of the
+                    # shape using only the contour
+                    print(cv2.contourArea(c))
+                    '''
+                    if cv2.contourArea(c) < 1000 or cv2.contourArea(c) > 410000:
+                        continue
+                    '''
+                    '''
+                    M = cv2.moments(c)
+                    cX = int((M["m10"] / M["m00"]) * ratio)
+                    cY = int((M["m01"] / M["m00"]) * ratio)
+
+                    shape_predict = sd.detect(c)
+                    if shape_predict is not shape:
+                        continue
+                    '''
+
+                    # multiply the contour (x, y)-coordinates by the resize ratio,
+                    # then draw the contours and the name of the shape on the image
+                    '''
+                    c = c.astype("float")
+                    c *= ratio
+                    c = c.astype("int")
+                    '''
+                    # cv2.drawContours(image, [c], -1, (0, 255, 0), 2)
+                    x, y, w, h = cv2.boundingRect(c)
+                """
+
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
+
+def remove_black_border(image_lists):
+    image_list_dict = get_shuffl_image_list(image_lists, 1, imageconf.RANDOM_SEED, FLAGS.image_dir)
+    keys = image_list_dict.keys()
+    if FLAGS.output_dir is None:
+        output_path_root = FLAGS.image_dir
+    else:
+        output_path_root = FLAGS.output_dir
+    for key in keys:
+        output_path = os.path.join(output_path_root, 'removeblackborder', image_lists[key]['dir'])
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        for image_file in image_list_dict[key]:
+            try:
+                img = cv2.imread(image_file)
+                rm_boarder = RemoveBorder()
+                xmin, ymin, xmax, ymax = rm_boarder.remove_border(img, FLAGS.borderMargin)
+                crop_img = img[ymin:ymax, xmin:xmax]
+                output_file = os.path.join(output_path, "remove_border"+"_" + os.path.basename(image_file))
+                cv2.imwrite(output_file, crop_img)
+            except cv2.error:
+                recordLogs.logger.info("OpenCV error({0})".format(image_file))
+                continue
+
+
 def main():
 
     # Look at the folder structure, and create lists of all the images.
     image_lists = create_image_lists(FLAGS.image_dir)
+    if image_lists is None:
+        return -1
     class_count = len(image_lists.keys())
     if class_count == 0:
         recordLogs.logger.info('No valid folders of images found at ' + FLAGS.image_dir)
@@ -450,6 +574,13 @@ def main():
         morphological(image_lists, FLAGS.morph)
     if FLAGS.calGradient is not None:
         cal_gradient(image_lists, FLAGS.calGradient)
+    if FLAGS.toGray is not None and FLAGS.toGray:
+        transfer_gray(image_lists)
+    if FLAGS.autoSplit is not None:
+        auto_split(image_lists, FLAGS.autoSplit)
+    if FLAGS.removeBlackBorder is not None and FLAGS.removeBlackBorder:
+        remove_black_border(image_lists)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -463,7 +594,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--output_dir',
         type=str,
-        default='',
+        default='output',
         help='Path to folders of distortion.'
     )
     parser.add_argument(
@@ -533,6 +664,36 @@ if __name__ == '__main__':
         help="""\
       Calculate gradient magnitude and orientation by different kernels\
       """
+    )
+    parser.add_argument(
+        '--toGray',
+        action='store_true',
+        help="""\
+      Transform image to gray\
+      """
+    )
+    parser.add_argument(
+        '--autoSplit',
+        type=str,
+        choices=['rectangle', 'triangle'],
+        help="""\
+          Automatically detect and crop the specified shape\
+          """
+    )
+    parser.add_argument(
+        '--removeBlackBorder',
+        action='store_true',
+        help="""\
+          Remove the blackborder from image\
+          """
+    )
+    parser.add_argument(
+        '--borderMargin',
+        type=int,
+        default=0,
+        help="""\
+          Leave margin while remove border\
+          """
     )
     FLAGS, unparsed = parser.parse_known_args()
     main()
