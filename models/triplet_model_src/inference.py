@@ -105,7 +105,15 @@ def load_model(model, sess):
 
 
 def get_model_filenames(model_dir):
+    '''
+    :param model_dir:
+    :type model_dir:
+    :return:
+    :rtype:
+    '''
     files = os.listdir(model_dir)
+    '''
+    '''
     meta_files = [s for s in files if s.endswith('.meta')]
     if len(meta_files) == 0:
         raise ValueError('No meta file found in the model directory (%s)' % model_dir)
@@ -124,6 +132,12 @@ def get_model_filenames(model_dir):
 
 
 def extract_features(imagefiles):
+    '''
+    :param imagefiles:
+    :type imagefiles:
+    :return:
+    :rtype:
+    '''
     print(len(imagefiles))
     filequeue = tf.train.string_input_producer(imagefiles, capacity=128, shuffle=False, num_epochs=1)
     reader = tf.WholeFileReader()
