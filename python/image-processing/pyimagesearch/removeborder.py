@@ -94,11 +94,11 @@ class RemoveBorder:
         # use canny get the gradient
 
         ratio, resized = self.resize_img(img)
-        processimg = self.preprocess(resized)
         '''
         cv2.imshow("image", processimg)
         cv2.waitKey(0)
         '''
+        processimg = self.preprocess(resized)
 
         top_mid = [int(np.shape(processimg)[1] / 2), 0]
         bottom_mid = [int(np.shape(processimg)[1] / 2), np.shape(processimg)[0]]

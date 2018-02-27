@@ -2,6 +2,9 @@ import logging
 
 
 class myLogs:
+    '''
+
+    '''
     def __init__(self, level=logging.INFO, filename="mylogs.log"):
         logLevel = level
         consoleFormat = '%(funcName)s[line:%(lineno)d] %(levelname)s %(message)s'
