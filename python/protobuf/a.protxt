@@ -1,0 +1,24 @@
+filled: true
+conv2d_op_list {
+  filters: 32
+  kernels: 3
+  kernels: 4
+  strides: 5
+  strides: 7
+  strides: 1
+  trainable: true
+}
+conv2d_op_list {
+  filters: 16
+  kernels: 1
+  kernels: 5
+  strides: 5
+  strides: 7
+  strides: 1
+  paddings: VALID
+  last_op: true
+}
+softmax_cross_entropy_op_list {
+  weights: 1.0
+  last_op: true
+}

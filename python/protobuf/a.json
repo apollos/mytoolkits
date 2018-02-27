@@ -1,0 +1,40 @@
+{
+  "filled": true,
+  "conv2dOpList": [
+    {
+      "filters": 32,
+      "kernels": [
+        3,
+        4
+      ],
+      "strides": [
+        5,
+        7,
+        1
+      ],
+      "trainable": true
+    },
+    {
+      "filters": 16,
+      "kernels": [
+        1,
+        5
+      ],
+      "strides": [
+        5,
+        7,
+        1
+      ],
+      "paddings": "VALID",
+      "lastOp": true
+    }
+  ],
+  "softmaxCrossEntropyOpList": [
+    {
+      "weights": [
+        1.0
+      ],
+      "lastOp": true
+    }
+  ]
+}
