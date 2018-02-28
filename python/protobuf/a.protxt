@@ -19,6 +19,6 @@ conv2d_op_list {
   last_op: true
 }
 softmax_cross_entropy_op_list {
-  weights: 1.0
+  weights: 1
   last_op: true
 }

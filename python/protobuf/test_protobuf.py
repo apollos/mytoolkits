@@ -114,3 +114,5 @@ print("****************************")
 print(gen_pool2.conv2d_op_list[0].kernels)
 gen_pool2.conv2d_op_list[0].kernels.extend(gen_pool3.conv2d_op_list[0].kernels)
 print(len(gen_pool2.conv2d_op_list[0].kernels))
+
+print(mypackage_pb2._GENEPOOL.fields_by_name['conv2d_op_list'].message_type.name)
