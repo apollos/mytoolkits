@@ -2,55 +2,29 @@ import os
 import pydicom as dicom
 import argparse
 import numpy as np
-from libtiff import TIFF
 
 
-def mri_to_png(mri_file_path, png_file_path):
+def mri_to_png(mri_file ):
     """ Function to convert from a DICOM image to png
 
         @param mri_file: An opened file like object to read te dicom data
         @param png_file: An opened file like object to write the png data
     """
 
-    with open(mri_file_path, 'rb') as mri_file:
-        plan = dicom.read_file(mri_file)
-        mri_file.close()
-        # Extracting data from the mri file
-        shape = plan.pixel_array.shape
-        image_2d = plan.pixel_array
-        pre_max_val = 825
-        pre_min_val = 110
-        zero_percent = 0.20
-        high_percent = 0.02
-        tmp_array = np.reshape(image_2d, shape[0]*shape[1])
-        tmp_array.sort()
-        if tmp_array[int(zero_percent * shape[0] * shape [1])+1] < pre_min_val and \
-            tmp_array[-int(high_percent * shape[0] * shape [1])+1] > pre_max_val:
-            image_2d[image_2d <= pre_min_val] = 0
-            image_2d[image_2d >= pre_max_val] = pre_max_val
-            pre_min_val = 0
-        elif tmp_array[-1] < pre_min_val: 
-            pre_max_val = tmp_array[-1]
-            pre_min_val = 0
-            image_2d[image_2d <= pre_min_val] = 0
-        elif tmp_array[int(zero_percent * shape[0] * shape [1])+1] >= pre_max_val:
-            pre_min_val = tmp_array[int(zero_percent * shape[0] * shape [1])+1]
-            pre_max_val = tmp_array[-int(high_percent * shape[0] * shape [1])+1]
-            image_2d[image_2d <= pre_min_val] = 0
-            image_2d[image_2d >= pre_max_val] = pre_max_val
-        else:
-            pre_min_val = tmp_array[int(zero_percent * shape[0] * shape [1])+1]
-            pre_max_val = min(tmp_array[-1], pre_max_val)
-            image_2d[image_2d <= pre_min_val] = 0
-            image_2d[image_2d >= pre_max_val] = pre_max_val
+    # Extracting data from the mri file
+    plan = dicom.read_file(mri_file)
+    shape = plan.pixel_array.shape
+    image_2d = plan.pixel_array
+    max_val = image_2d.max() 
+    min_val = image_2d.min()
+    tmp_array = np.reshape(image_2d, shape[0]*shape[1])
+    tmp_array[::-1].sort()
+    idx1 = int(shape[0]*shape[1]*0.025)+1
+    idx2 = int(shape[0]*shape[1]*0.0008)+1
+    if max_val > 810 and max_val < 830:
+        print(mri_file)
+        print(min_val, max_val, shape, tmp_array[idx1], tmp_array[idx2])
 
-        # Rescaling grey scale between 0-255
-        image_2d_scaled = np.asarray(image_2d, dtype='float')
-        image_2d_scaled = image_2d_scaled / pre_max_val*255
-        # Writing the PNG file
-        tiff = TIFF.open(png_file_path, mode='w')
-        tiff.write_image(image_2d_scaled)
-        tiff.close()
 
 
 def convert_file(mri_file_path, png_file_path):
@@ -69,8 +43,12 @@ def convert_file(mri_file_path, png_file_path):
     if os.path.exists(png_file_path):
         raise Exception('File "%s" already exists' % png_file_path)
 
+    mri_file = open(mri_file_path, 'rb')
+    #png_file = open(png_file_path, 'wb')
 
-    mri_to_png(mri_file_path, png_file_path)
+    mri_to_png(mri_file )
+
+    #png_file.close()
 
 
 def convert_folder(mri_folder, png_folder):
