@@ -162,6 +162,7 @@ def convert_folder(mri_folder, png_folder):
                 try:
                     # Convert the actual file
                     convert_file(mri_file_path, png_file_path)
+                    print('.', end='', flush=True)
                     #print('SUCCESS>', mri_file_path, '-->', png_file_path)
                 except Exception as e:
                     print('FAIL>', mri_file_path, '-->', png_file_path, ':', e)
