@@ -97,7 +97,7 @@ def mri_to_png(mri_file, png_file, mri_file_path):
         tol = max(0., float(max_val - min_val)/10**(len(str(max_val - min_val)) - 1))
     else:
         tol = max(0., float(max_val - min_val)/10**(len(str(max_val - min_val))))
-    if tol > 3:
+    if tol >= 4:
         print("Warning: TOL maybe too large:{}, {}, {}: {}".format(
             max_val, min_val, tol, mri_file_path))
     max_val = image_2d.max()
