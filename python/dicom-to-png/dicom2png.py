@@ -1,5 +1,5 @@
 import os
-import png
+import cv2
 import pydicom as dicom
 import argparse
 import numpy as np
@@ -17,7 +17,7 @@ def imadjust(mri_file_path, src, tol=1., vin=[0, 255], vout=[0, 255]):
     assert len(src.shape) == 2  #'Input image should be 2-dims'
     
     tol = max(0., min(100., tol))
-    #print(src.max(), src.min(), tol)
+    print(src.max(), src.min(), tol)
 
     if tol > 0:
         # Compute in and out limits
@@ -50,7 +50,7 @@ def imadjust(mri_file_path, src, tol=1., vin=[0, 255], vout=[0, 255]):
     return dst
 
 
-def mri_to_png(mri_file, png_file, mri_file_path):
+def mri_to_png(mri_file, png_file_path, mri_file_path):
     """ Function to convert from a DICOM image to png
         @param mri_file: An opened file like object to read te dicom data
         @param png_file: An opened file like object to write the png data
@@ -61,39 +61,47 @@ def mri_to_png(mri_file, png_file, mri_file_path):
     shape = plan.pixel_array.shape
     
     image_2d = plan.pixel_array
-    tmp_array = copy.deepcopy(image_2d)
-    
-    tmp_array = np.asarray(tmp_array, dtype=np.uint16)
     inv = False
-    if tmp_array.max() > 32678:
-        inv = True
-    try:
-        offset = getattr(plan, 'RescaleIntercept')
-    except AttributeError:
-        offset = 0
-    #print(offset)
-    tmp_array[tmp_array < 0] = 0
-    for row in np.arange(shape[0]):
-        for col in np.arange(shape[1]):
-            if inv:
-                if tmp_array[row][col] > 32678:
-                    image_2d[row][col] = max(0, int(tmp_array[row][col] - 65536 + offset))
+    if type(image_2d[0][0]) == np.int16:
+        tmp_array = copy.deepcopy(image_2d)
+
+        tmp_array = np.asarray(tmp_array, dtype=np.uint16)
+        if tmp_array.max() > 32678:
+            inv = True
+        try:
+            offset = getattr(plan, 'RescaleIntercept')
+        except AttributeError:
+            offset = 0
+        #print(offset, shape, tmp_array.min(), tmp_array.max())
+
+        for row in np.arange(shape[0]):
+            for col in np.arange(shape[1]):
+                if inv:
+                    if tmp_array[row][col] > 32678:
+                        image_2d[row][col] = max(0, int(tmp_array[row][col] - 65536 + offset))
+                    else:
+                        image_2d[row][col] = max(0, int(tmp_array[row][col] + offset))
+
                 else:
                     image_2d[row][col] = max(0, int(tmp_array[row][col] + offset))
+                """
+                #define LEVEL_LUNG 50
+                #define WIDTH_LUNG 80
+                pix = (pix - (level-width/2))*255/width;
+                """
+    elif type(image_2d[0][0]) != np.uint16:
+        print("Warning: pixel_array[0] type is {} which not expected".format(type(image_2d[0][0])))
 
-            else:
-                image_2d[row][col] = max(0, int(tmp_array[row][col] + offset))
-            """
-            #define LEVEL_LUNG 50
-            #define WIDTH_LUNG 80
-            pix = (pix - (level-width/2))*255/width;
-            """
     max_val = image_2d.max()
     min_val = image_2d.min()
+    image_2d = cv2.convertScaleAbs(image_2d, alpha=255.0 / image_2d.max())
 
+    ''''
     for row in np.arange(shape[0]):
         for col in np.arange(shape[1]):
             image_2d[row][col] = (image_2d[row][col] - min_val)*255/max_val
+    '''
+
     if inv:
         tol = max(0., float(max_val - min_val)/10**(len(str(max_val - min_val)) - 1))+0.5
     else:
@@ -105,10 +113,9 @@ def mri_to_png(mri_file, png_file, mri_file_path):
     min_val = image_2d.min()
 
     image_2d_scaled = imadjust(mri_file_path, image_2d, tol=tol, vin=[min_val, max_val], vout=[0, 255])
-    
     image_2d_scaled = np.asarray(image_2d_scaled, dtype=np.uint8)
-    w = png.Writer(shape[0], shape[1], greyscale=True)
-    w.write(png_file, image_2d_scaled)
+    imgBGR = cv2.cvtColor(image_2d_scaled, cv2.COLOR_GRAY2BGR)
+    cv2.imwrite(png_file_path, imgBGR)
 
 
 def convert_file(mri_file_path, png_file_path):
@@ -127,11 +134,9 @@ def convert_file(mri_file_path, png_file_path):
         os.remove(png_file_path)
     
     mri_file = open(mri_file_path, 'rb')
-    png_file = open(png_file_path, 'wb')
     
-    mri_to_png(mri_file, png_file, mri_file_path)
-    
-    png_file.close()
+    mri_to_png(mri_file, png_file_path, mri_file_path)
+
 
 
 def convert_folder(mri_folder, png_folder):
