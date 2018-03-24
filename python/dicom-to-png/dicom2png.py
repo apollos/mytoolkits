@@ -71,6 +71,7 @@ def mri_to_png(mri_file, png_file, mri_file_path):
         offset = getattr(plan, 'RescaleIntercept')
     except AttributeError:
         offset = 0
+    #print(offset)
     tmp_array[tmp_array < 0] = 0
     for row in np.arange(shape[0]):
         for col in np.arange(shape[1]):
@@ -94,7 +95,7 @@ def mri_to_png(mri_file, png_file, mri_file_path):
         for col in np.arange(shape[1]):
             image_2d[row][col] = (image_2d[row][col] - min_val)*255/max_val
     if inv:
-        tol = max(0., float(max_val - min_val)/10**(len(str(max_val - min_val)) - 1))
+        tol = max(0., float(max_val - min_val)/10**(len(str(max_val - min_val)) - 1))+0.5
     else:
         tol = max(0., float(max_val - min_val)/10**(len(str(max_val - min_val))))
     if tol >= 4:
@@ -102,7 +103,8 @@ def mri_to_png(mri_file, png_file, mri_file_path):
             max_val, min_val, tol, mri_file_path))
     max_val = image_2d.max()
     min_val = image_2d.min()
-    image_2d_scaled = imadjust(mri_file_path, image_2d, tol=tol, vin=[min_val, max_val], vout=[10, 255])
+
+    image_2d_scaled = imadjust(mri_file_path, image_2d, tol=tol, vin=[min_val, max_val], vout=[0, 255])
     
     image_2d_scaled = np.asarray(image_2d_scaled, dtype=np.uint8)
     w = png.Writer(shape[0], shape[1], greyscale=True)
