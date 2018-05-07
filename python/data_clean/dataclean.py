@@ -4,6 +4,7 @@ import fnmatch
 import mylogs
 import collections
 import numpy as np
+import chardet
 
 default_file_ext = ["csv", "txt"]
 excel_file_ext = ['xls', 'xlsx']
@@ -17,6 +18,12 @@ class DataClean:
         self.file_ext = file_ext
         self.header_flag = header_flag
 
+    @staticmethod
+    def detect_coder(filepath):
+        with open(filepath, 'rb') as f:
+            rst = chardet.detect(f.read())
+        return rst['encoding']
+
     def read_content(self, filepath, object_column_names):
         file_df = None
         dtype_dict = {}
@@ -25,22 +32,24 @@ class DataClean:
                 dtype_dict[column_name] = object
         if not os.path.exists(filepath):
             self.recordLogs.logger.error("%s does not exist" % filepath)
+            return None
+        coder = self.detect_coder(filepath)
         if "csv" in self.file_ext or "txt" in self.file_ext:
             if not self.header_flag:
-                file_df = pd.read_csv(filepath, header=None)
+                file_df = pd.read_csv(filepath, header=None, encoding=coder)
             else:
                 if len(dtype_dict) > 0:
-                    file_df = pd.read_csv(filepath, dtype=dtype_dict)
+                    file_df = pd.read_csv(filepath, dtype=dtype_dict, encoding=coder)
                 else:
-                    file_df = pd.read_csv(filepath)
+                    file_df = pd.read_csv(filepath, encoding=coder)
         elif "xls" in self.file_ext or "xlsx" in self.file_ext:
             if not self.header_flag:
                 file_df = pd.read_excel(filepath, header=None)
             else:
                 if len(dtype_dict) > 0:
-                    file_df = pd.read_excel(filepath, dtype=dtype_dict)
+                    file_df = pd.read_excel(filepath, dtype=dtype_dict, encoding=coder)
                 else:
-                    file_df = pd.read_excel(filepath, dtype=dtype_dict)
+                    file_df = pd.read_excel(filepath, dtype=dtype_dict, encoding=coder)
         return file_df
 
     def load_datafile(self, input_path, object_column_names, target_column_names):
