@@ -22,6 +22,8 @@ class DataClean:
     def detect_coder(filepath):
         with open(filepath, 'rb') as f:
             rst = chardet.detect(f.read())
+        if 'GB2312' == rst['encoding']:
+            rst['encoding'] = 'GB18030'
         return rst['encoding']
 
     def read_content(self, filepath, object_column_names):
