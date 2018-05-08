@@ -3,6 +3,7 @@ import logging
 import mylogs
 import dataclean
 import os
+import csv
 
 
 FLAGS = None
@@ -12,11 +13,31 @@ logLevel = logging.DEBUG
 recordLogs = mylogs.myLogs(logLevel)
 
 
+def save_head_info(filename, rows):
+    with open('{}_head_info.csv'.format(filename), 'w') as f:
+        wr = csv.writer(f, quoting=csv.QUOTE_ALL)
+        for item in rows:
+            wr.writerow(item)
+
 def show_table_info(table_df, target_columns):
+    csv_columns = [['Column_Name', 'Type', 'Has_Missing_Data', 'Same_Data_Column', 'Questions', 'Comments']]
+    row_idx = {}
     for dict_key in table_df.keys():
         if dict_key != "df" and table_df[dict_key] is not None and len(table_df[dict_key]) > 0:
             print("%s:" % dict_key)
             print(table_df[dict_key])
+            if dict_key == 'heads':
+                for idx, items in enumerate(table_df[dict_key]):
+                    csv_columns.append([items[0], items[1].name, 0, 0, '', ''])
+                    row_idx[items[0]] = idx+1
+            elif dict_key == 'missing':
+                for item in table_df[dict_key]:
+                    csv_columns[row_idx[item]][2] = 1
+            elif dict_key == 'sameData':
+                for item in table_df[dict_key]:
+                    csv_columns[row_idx[item]][3] = 1
+    return csv_columns
+
 
 
 def str2bool(v):
@@ -47,7 +68,8 @@ def main():
         keys = table_list.keys()
         for key in keys:
             print ("***********************Table %s Information:**************************" % key)
-            show_table_info(table_list[key], FLAGS.target_columns)
+            csv_rows = show_table_info(table_list[key], FLAGS.target_columns)
+            save_head_info(key, csv_rows)
     elif FLAGS.action == 'join':
         if FLAGS.join_key is None:
             recordLogs.logger.error("join key is not available")
