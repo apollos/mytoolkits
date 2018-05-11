@@ -1,10 +1,12 @@
+# -*- coding: utf-8 -*-
+
 import pandas as pd
 import os
 import fnmatch
-import mylogs
+from . import mylogs
 import collections
 import numpy as np
-import chardet
+from chardet.universaldetector import UniversalDetector
 
 default_file_ext = ["csv", "txt"]
 excel_file_ext = ['xls', 'xlsx']
@@ -18,13 +20,17 @@ class DataClean:
         self.file_ext = file_ext
         self.header_flag = header_flag
 
-    @staticmethod
-    def detect_coder(filepath):
+    def detect_coder(self, filepath):
+        detector = UniversalDetector()
+        self.recordLogs.logger.info("Detect coder mode for file {}".format(filepath))
         with open(filepath, 'rb') as f:
-            rst = chardet.detect(f.read())
-        if 'GB2312' == rst['encoding']:
-            rst['encoding'] = 'GB18030'
-        return rst['encoding']
+            while True:
+                detector.feed(f.readline())
+                if detector.done:
+                    break
+        if 'gb2312' == detector.result['encoding'].lower():
+            detector.result['encoding'] = 'gb18030'
+        return detector.result['encoding']
 
     def read_content(self, filepath, object_column_names):
         file_df = None
@@ -36,7 +42,9 @@ class DataClean:
             self.recordLogs.logger.error("%s does not exist" % filepath)
             return None
         coder = self.detect_coder(filepath)
+
         if "csv" in self.file_ext or "txt" in self.file_ext:
+            self.recordLogs.logger.info("Start read csv file: {}".format(filepath))
             if not self.header_flag:
                 file_df = pd.read_csv(filepath, header=None, encoding=coder)
             else:
@@ -45,6 +53,7 @@ class DataClean:
                 else:
                     file_df = pd.read_csv(filepath, encoding=coder)
         elif "xls" in self.file_ext or "xlsx" in self.file_ext:
+            self.recordLogs.logger.info("Start read xls file: {}".format(filepath))
             if not self.header_flag:
                 file_df = pd.read_excel(filepath, header=None)
             else:
