@@ -3,14 +3,46 @@
 import pandas as pd
 import os
 import fnmatch
-from . import mylogs
+import mylogs
 import collections
 import numpy as np
-from chardet.universaldetector import UniversalDetector
+import chardet
+from multiprocessing import Pool
 
-default_file_ext = ["csv", "txt"]
-excel_file_ext = ['xls', 'xlsx']
+default_file_ext = [".csv", ".txt"]
+excel_file_ext = ['.xls', '.xlsx']
 STATS_CLASS_NUM = 10
+MAX_READ_SIZE = 1024*1024*5
+MAX_THREAD_NUM = 10
+MAX_READ_LINES = 10000
+SOFT_LMT_DF_ROW_NUM = 20*MAX_READ_LINES
+
+logger = mylogs.myLogs()
+
+
+def read_csv_file(filepath, coder, type_dict, header_flag, file_ext, skiprows=None, read_rows=None):
+    param = {"filepath_or_buffer": filepath, "encoding": coder, "skiprows": skiprows, "nrows": read_rows}
+    if type_dict and len(type_dict) > 0:
+        param['dtype'] = type_dict
+    if not header_flag:
+        param['header'] = None
+        logger.logger.debug("Start to read file: {}".format(filepath))
+    if os.path.splitext(filepath)[1] in default_file_ext:
+        func = pd.read_csv
+    elif os.path.splitext(filepath)[1] in excel_file_ext:
+        func = pd.read_excel
+    else:
+        logger.logger.error("Unsupported file type {}".format(filepath))
+        return None
+
+    try:
+        logger.logger.debug("Read file {} from {} to {}".format(os.path.basename(filepath), skiprows, skiprows + read_rows))
+        file_df = func(**param)
+    except Exception as e:
+        """Normally, it caused by out of range for skiprows"""
+        logger.logger.info("{} - {} may cause out of range for file {}".format(skiprows, read_rows, os.path.basename(filepath)))
+        file_df = None
+    return file_df
 
 
 class DataClean:
@@ -21,19 +53,20 @@ class DataClean:
         self.header_flag = header_flag
 
     def detect_coder(self, filepath):
-        detector = UniversalDetector()
-        self.recordLogs.logger.info("Detect coder mode for file {}".format(filepath))
+        self.recordLogs.logger.info("Detect coder mode for file {}".format(os.path.basename(filepath)))
         with open(filepath, 'rb') as f:
-            while True:
-                detector.feed(f.readline())
-                if detector.done:
-                    break
-        if 'gb2312' == detector.result['encoding'].lower():
-            detector.result['encoding'] = 'gb18030'
-        return detector.result['encoding']
+            if os.stat(filepath).st_size <= MAX_READ_SIZE:
+                detector = chardet.detect(f.read())
+            else:
+                detector = chardet.detect(f.read(MAX_READ_SIZE))
+        if detector.get('encoding') is None:
+            return 'gb18030'
+        if 'gb2312' == detector['encoding'].lower():
+            detector['encoding'] = 'gb18030'
+        self.recordLogs.logger.info("file {} coding type {}".format(os.path.basename(filepath), detector['encoding']))
+        return detector['encoding']
 
     def read_content(self, filepath, object_column_names):
-        file_df = None
         dtype_dict = {}
         if object_column_names is not None and len(object_column_names) > 0:
             for column_name in object_column_names:
@@ -42,25 +75,34 @@ class DataClean:
             self.recordLogs.logger.error("%s does not exist" % filepath)
             return None
         coder = self.detect_coder(filepath)
+        file_pool = Pool(MAX_THREAD_NUM)
+        skiprows = 0
+        all_df = []
+        header = read_csv_file(filepath, coder, dtype_dict, self.header_flag, self.file_ext, skiprows, 2)
+        while True:
+            param_lst = []
+            for cnt in range(MAX_THREAD_NUM):
+                param_lst.append((filepath, coder, dtype_dict, self.header_flag, self.file_ext, skiprows, MAX_READ_LINES))
+                skiprows += MAX_READ_LINES
 
-        if "csv" in self.file_ext or "txt" in self.file_ext:
-            self.recordLogs.logger.info("Start read csv file: {}".format(filepath))
-            if not self.header_flag:
-                file_df = pd.read_csv(filepath, header=None, encoding=coder)
+            file_df_lst = file_pool.starmap(read_csv_file, param_lst)
+            if file_df_lst[-1] is None:
+                """Read complete"""
+                all_df.extend(list(filter(lambda s: s is not None, file_df_lst)))
+                break
             else:
-                if len(dtype_dict) > 0:
-                    file_df = pd.read_csv(filepath, dtype=dtype_dict, encoding=coder)
-                else:
-                    file_df = pd.read_csv(filepath, encoding=coder)
-        elif "xls" in self.file_ext or "xlsx" in self.file_ext:
-            self.recordLogs.logger.info("Start read xls file: {}".format(filepath))
-            if not self.header_flag:
-                file_df = pd.read_excel(filepath, header=None)
-            else:
-                if len(dtype_dict) > 0:
-                    file_df = pd.read_excel(filepath, dtype=dtype_dict, encoding=coder)
-                else:
-                    file_df = pd.read_excel(filepath, dtype=dtype_dict, encoding=coder)
+                all_df.extend(file_df_lst)
+                if file_df_lst[-1].shape[0] != MAX_READ_LINES:
+                    """Read complete"""
+                    break
+        self.recordLogs.logger.info("Merge {} pieces of DF together".format(len(all_df)))
+        file_df = None
+        for df in all_df:
+            if df.empty:
+                continue
+            df.columns = header.columns
+        file_df = pd.concat(all_df)
+
         return file_df
 
     def load_datafile(self, input_path, object_column_names, target_column_names):
@@ -81,7 +123,7 @@ class DataClean:
                 for root, dir_names, filenames in os.walk(input_path):
                     for file_ext in self.file_ext:
                         for filename in fnmatch.filter(filenames, '*.' + file_ext):
-                            file_list.append(os.path.join(unicode(root, 'utf8'), unicode(filename, 'utf8')))
+                            file_list.append(os.path.join(root, filename))
         self.recordLogs.logger.info("Total File number: %d" % len(file_list))
         for file_path in file_list:
             table_content[os.path.basename(file_path)]["df"] = self.read_content(file_path, object_column_names)
@@ -99,7 +141,6 @@ class DataClean:
                 self.recordLogs.logger.error("Create Path %s failed. Error Code %d" % (dirname, e.errno))
                 return
         filename, extfile = os.path.splitext(output_path)
-        extfile = extfile.replace('.', '')
         if extfile in default_file_ext:
             dataframe.to_csv(output_path, encoding='utf-8', index=False)
         elif extfile in excel_file_ext:

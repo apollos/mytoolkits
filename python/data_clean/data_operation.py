@@ -21,6 +21,7 @@ def save_head_info(filename, rows):
         for item in rows:
             wr.writerow(item)
 
+
 def show_table_info(table_df, target_columns):
     csv_columns = [['Column_Name', 'Type', 'Has_Missing_Data', 'Same_Data_Column', 'Questions', 'Comments']]
     row_idx = {}
@@ -41,7 +42,6 @@ def show_table_info(table_df, target_columns):
     return csv_columns
 
 
-
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
@@ -53,7 +53,6 @@ def str2bool(v):
 
 def main():
     # Set up the pre-trained graph.
-
     dataclean_handle = dataclean.DataClean(file_ext=FLAGS.file_ext.split(","), header_flag=FLAGS.header)
     if FLAGS.output_file is not None:
         if not os.path.exists(FLAGS.output_file):
