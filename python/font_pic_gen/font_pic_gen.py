@@ -118,7 +118,7 @@ def main(FLAGS):
 
         draw = ImageDraw.Draw(char_image)
         font_obj = ImageFont.truetype(font_name, font_size)
-        font_y = randint(int(-float(FONT_H_MARGIN)/2.), resolution_y - (font_size+FONT_H_MARGIN))
+        font_y = randint(0, max(resolution_y - (font_size+FONT_H_MARGIN), 2))
         font_x = randint(int(-float(FONT_W_MARGIN)/2.), resolution_x - (font_size+FONT_W_MARGIN)*character_number_per_img)
         content = []
         next_x = 0
@@ -139,7 +139,7 @@ def main(FLAGS):
                              resolution_x - font_x - (character_number_per_img - char_idx - 1) * (font_size+FONT_W_MARGIN))
 
             # Calculate y position
-            next_y = randint(-2, int(font_size/4))  # we expect the text at the almost same horizon
+            next_y = randint(0, int(font_size/4))  # we expect the text at the almost same horizon
 
             content.append(character_lst[rand_idx])
 
