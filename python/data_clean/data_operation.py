@@ -3,6 +3,7 @@ import logging
 import mylogs
 import dataclean
 import os
+import csv
 
 
 FLAGS = None
@@ -13,11 +14,27 @@ recordLogs = mylogs.myLogs(logLevel)
 
 
 def show_table_info(table_df, target_columns):
+    csv_columns = [['Column_Name', 'Type', 'Has_Missing_Data', 'Same_Data_Column', 'Questions', 'Comments']]
+    row_idx = {}
     for dict_key in table_df.keys():
         if dict_key != "df" and table_df[dict_key] is not None and len(table_df[dict_key]) > 0:
             print("%s:" % dict_key)
             print(table_df[dict_key])
+            if dict_key == 'heads':
+                for idx, items in enumerate(table_df[dict_key]):
+                    csv_columns.append([items[0], items[1].name, 0, 0, '', ''])
+                    row_idx[items[0]] = idx+1
+            elif dict_key == 'missing':
+                for item in table_df[dict_key]:
+                    csv_columns[row_idx[item]][2] = 1
+            elif dict_key == 'sameData':
+                for item in table_df[dict_key]:
+                    csv_columns[row_idx[item]][3] = 1
 
+    with open('head_info.csv', 'w') as f:
+        wr = csv.writer(f, quoting=csv.QUOTE_ALL)
+        for item in csv_columns:
+            wr.writerow(item)
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
