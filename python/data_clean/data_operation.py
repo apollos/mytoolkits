@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import argparse
 import logging
 import mylogs
@@ -11,6 +13,13 @@ csv_file_ext = "csv"
 
 logLevel = logging.DEBUG
 recordLogs = mylogs.myLogs(logLevel)
+
+
+def save_head_info(filename, rows):
+    with open('{}_head_info.csv'.format(filename), 'w') as f:
+        wr = csv.writer(f, quoting=csv.QUOTE_ALL)
+        for item in rows:
+            wr.writerow(item)
 
 
 def show_table_info(table_df, target_columns):
@@ -35,6 +44,7 @@ def show_table_info(table_df, target_columns):
         wr = csv.writer(f, quoting=csv.QUOTE_ALL)
         for item in csv_columns:
             wr.writerow(item)
+    return csv_columns
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -47,7 +57,6 @@ def str2bool(v):
 
 def main():
     # Set up the pre-trained graph.
-
     dataclean_handle = dataclean.DataClean(file_ext=FLAGS.file_ext.split(","), header_flag=FLAGS.header)
     if FLAGS.output_file is not None:
         if not os.path.exists(FLAGS.output_file):
@@ -64,7 +73,8 @@ def main():
         keys = table_list.keys()
         for key in keys:
             print ("***********************Table %s Information:**************************" % key)
-            show_table_info(table_list[key], FLAGS.target_columns)
+            csv_rows = show_table_info(table_list[key], FLAGS.target_columns)
+            save_head_info(key, csv_rows)
     elif FLAGS.action == 'join':
         if FLAGS.join_key is None:
             recordLogs.logger.error("join key is not available")
