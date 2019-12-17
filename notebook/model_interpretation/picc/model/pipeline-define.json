@@ -1,0 +1,13 @@
+[
+    {
+        "name": "predict_warm",
+        "func": ["None.model_files.model_service", "predict_warm_single", ""],
+        "type": "warm",
+        "inputs": ["input:pre_data"],
+        "outputs": ["output:predict_y", "reason:error_str"],
+        "extra_args": [],
+        "extra_kwargs": {"model_id":"None", "weight_file_id":"weight", "pre_process_flag":true, "column_name_file":"column_name_lst.json", "timeout_log_threshold":300},
+        "flags": ["_max_instances=2", "_max_batch_size=100", "_gc_interval=-1"]
+
+    }
+]

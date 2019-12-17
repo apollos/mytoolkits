@@ -1,0 +1,12 @@
+[
+    {
+        "name": "predict_warm",
+        "func": ["None.model_files.model_service", "predict_cold_single_java", ""],
+        "type": "cold",
+        "inputs": ["inferenceData:pre_data", "count", "setup"],
+        "outputs": ["output:predict_y", "reason:error_str"],
+        "extra_args": [],
+        "extra_kwargs": {"weight_path": "None", "pre_process_flag":true, "column_name_file":"column_name_lst.json", "timeout_log_threshold":300},
+        "flags": []
+    }
+]

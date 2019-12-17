@@ -1,0 +1,10 @@
+{
+  "target": "value_classification",
+  "framework_type": "sklearn",
+  "hyper_params": {
+    "ml_params": {
+      "neural XGBClassifier_op 1 learning_rate": 0.08342978717312531,
+      "neural XGBClassifier_op 1 n_estimators": 175
+    }
+  }
+}
